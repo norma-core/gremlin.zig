@@ -90,7 +90,7 @@ pub const Reader = struct {
 
     /// Read 32-bit fixed integer at offset
     fn readFixed32At(self: Reader, offset: usize) Error!u32 {
-        if (!self.hasNext(offset, 4)) return Error.InvalidData;
+        if (!self.hasNext(offset, 3)) return Error.InvalidData;
         return @as(u32, self.buf[offset]) |
             @as(u32, self.buf[offset + 1]) << 8 |
             @as(u32, self.buf[offset + 2]) << 16 |
@@ -99,7 +99,7 @@ pub const Reader = struct {
 
     /// Read 64-bit fixed integer at offset
     fn readFixed64At(self: Reader, offset: usize) Error!u64 {
-        if (!self.hasNext(offset, 8)) return Error.InvalidData;
+        if (!self.hasNext(offset, 7)) return Error.InvalidData;
         return @as(u64, self.buf[offset]) |
             @as(u64, self.buf[offset + 1]) << 8 |
             @as(u64, self.buf[offset + 2]) << 16 |
