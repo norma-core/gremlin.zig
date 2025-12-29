@@ -20,8 +20,8 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const fields =  @import("../../../parser/main.zig").fields;
-const FieldType =  @import("../../../parser/main.zig").FieldType;
+const fields = @import("../../../parser/main.zig").fields;
+const FieldType = @import("../../../parser/main.zig").FieldType;
 
 /// Represents a repeated message field in Protocol Buffers.
 /// Handles serialization and deserialization of repeated nested messages,
@@ -228,8 +228,8 @@ pub const ZigRepeatableMessageField = struct {
 };
 
 test "basic repeatable message field" {
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -238,8 +238,8 @@ test "basic repeatable message field" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigRepeatableMessageField.init(
         std.testing.allocator,

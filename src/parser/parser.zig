@@ -48,18 +48,18 @@ const ParseResult = struct {
     files: std.ArrayList(ProtoFile),
     bufs: std.ArrayList(ParserBuffer),
     root: []const u8,
+    allocator: std.mem.Allocator,
 
     /// Frees all resources associated with the parse result
-    pub fn deinit(self: ParseResult) void {
+    pub fn deinit(self: *ParseResult) void {
         for (self.files.items) |*file| {
             file.deinit();
         }
-        self.files.deinit();
-
+        self.files.deinit(self.allocator);
         for (self.bufs.items) |*buf| {
             buf.deinit();
         }
-        self.bufs.deinit();
+        self.bufs.deinit(self.allocator);
     }
 };
 
@@ -154,5 +154,6 @@ pub fn parse(allocator: std.mem.Allocator, base_path: []const u8) !ParseResult {
         .files = parsed_files,
         .bufs = parser_buffers,
         .root = base_path,
+        .allocator = allocator,
     };
 }

@@ -18,9 +18,9 @@
 // Created by ab, 11.11.2024
 
 const std = @import("std");
-const Message =  @import("../../parser/main.zig").Message;
-const Enum =  @import("../../parser/main.zig").Enum;
-const FieldType =  @import("../../parser/main.zig").FieldType;
+const Message = @import("../../parser/main.zig").Message;
+const Enum = @import("../../parser/main.zig").Enum;
+const FieldType = @import("../../parser/main.zig").FieldType;
 const naming = @import("fields/naming.zig");
 const ZigEnum = @import("enum.zig").ZigEnum;
 const ZigFile = @import("file.zig").ZigFile;
@@ -66,10 +66,10 @@ pub const ZigStruct = struct {
         var fields_result = try FieldsBuilder.build(allocator, src, names_result.full_writer_name, names_result.full_wire_name, names_result.writer_name, names_result.reader_name);
         errdefer fields_result.deinit();
 
-        var scope_names = std.ArrayList([]const u8).init(allocator);
-        try scope_names.append("calcProtoubfSize");
-        try scope_names.append("encode");
-        defer scope_names.deinit();
+        var scope_names = try std.ArrayList([]const u8).initCapacity(allocator, 32);
+        try scope_names.append(allocator, "calcProtoubfSize");
+        try scope_names.append(allocator, "encode");
+        defer scope_names.deinit(allocator);
 
         return ZigStruct{
             .allocator = allocator,
@@ -98,13 +98,13 @@ pub const ZigStruct = struct {
         self.allocator.free(self.full_wire_name);
 
         for (self.enums.items) |*e| e.deinit();
-        self.enums.deinit();
+        self.enums.deinit(self.allocator);
 
         for (self.structs.items) |*s| s.deinit();
-        self.structs.deinit();
+        self.structs.deinit(self.allocator);
 
         for (self.fields.items) |*f| f.deinit();
-        self.fields.deinit();
+        self.fields.deinit(self.allocator);
     }
 
     /// Generates code for the struct
@@ -255,16 +255,17 @@ const FieldsBuilder = struct {
         enums: std.ArrayList(ZigEnum),
         structs: std.ArrayList(ZigStruct),
         fields: std.ArrayList(Field),
+        allocator: std.mem.Allocator,
 
-        pub fn deinit(self: *const Result) void {
+        pub fn deinit(self: *Result) void {
             for (self.enums.items) |*e| e.deinit();
-            self.enums.deinit();
+            self.enums.deinit(self.allocator);
 
             for (self.structs.items) |*s| s.deinit();
-            self.structs.deinit();
+            self.structs.deinit(self.allocator);
 
             for (self.fields.items) |*f| f.deinit();
-            self.fields.deinit();
+            self.fields.deinit(self.allocator);
         }
     };
 
@@ -276,15 +277,16 @@ const FieldsBuilder = struct {
         writer_struct_name: []const u8,
         reader_struct_name: []const u8,
     ) !Result {
-        var scope_names = std.ArrayList([]const u8).init(allocator);
-        try scope_names.append("calcProtoubfSize");
-        try scope_names.append("encode");
-        defer scope_names.deinit();
+        var scope_names = try std.ArrayList([]const u8).initCapacity(allocator, 4);
+        try scope_names.append(allocator, "calcProtoubfSize");
+        try scope_names.append(allocator, "encode");
+        defer scope_names.deinit(allocator);
 
         var result = Result{
-            .enums = std.ArrayList(ZigEnum).init(allocator),
-            .structs = std.ArrayList(ZigStruct).init(allocator),
-            .fields = std.ArrayList(Field).init(allocator),
+            .allocator = allocator,
+            .enums = try std.ArrayList(ZigEnum).initCapacity(allocator, 16),
+            .structs = try std.ArrayList(ZigStruct).initCapacity(allocator, 16),
+            .fields = try std.ArrayList(Field).initCapacity(allocator, 32),
         };
 
         try buildNestedTypes(allocator, &result, src, scope_name, &scope_names);
@@ -309,11 +311,11 @@ const FieldsBuilder = struct {
         scope_names: *std.ArrayList([]const u8),
     ) anyerror!void {
         for (src.enums.items) |*e| {
-            try result.enums.append(try ZigEnum.init(allocator, e, scope_name, scope_names));
+            try result.enums.append(allocator, try ZigEnum.init(allocator, e, scope_name, scope_names));
         }
 
         for (src.messages.items) |*m| {
-            try result.structs.append(try ZigStruct.init(allocator, m, scope_names, scope_name));
+            try result.structs.append(allocator, try ZigStruct.init(allocator, m, scope_names, scope_name));
         }
     }
 

@@ -20,7 +20,7 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const Option =  @import("../../../parser/main.zig").Option;
+const Option = @import("../../../parser/main.zig").Option;
 
 /// Represents a repeated bytes/string field in Protocol Buffers.
 /// Handles both serialization and deserialization of repeated length-delimited fields.
@@ -189,9 +189,9 @@ pub const ZigRepeatableBytesField = struct {
 // of both serialization and deserialization, including null handling
 
 test "repeatable bytes field with null values" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -200,8 +200,8 @@ test "repeatable bytes field with null values" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigRepeatableBytesField.init(
         std.testing.allocator,

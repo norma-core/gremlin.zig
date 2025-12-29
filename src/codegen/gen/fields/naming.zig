@@ -34,16 +34,16 @@ fn isKeyword(name: []const u8) bool {
 
 /// Convert a name to SCREAMING_SNAKE_CASE for constants
 fn makeZigConstName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    errdefer result.deinit();
+    var result = try std.ArrayList(u8).initCapacity(allocator, name.len * 2);
+    errdefer result.deinit(allocator);
 
-    if (name.len == 0) return result.toOwnedSlice();
+    if (name.len == 0) return result.toOwnedSlice(allocator);
 
     // Handle first character - prefix with '_' if it starts with a digit
     if (std.ascii.isDigit(name[0])) {
-        try result.append('_');
+        try result.append(allocator, '_');
     }
-    try result.append(std.ascii.toUpper(name[0]));
+    try result.append(allocator, std.ascii.toUpper(name[0]));
 
     // Process remaining characters
     for (name[1..], 0..) |c, i| {
@@ -55,7 +55,7 @@ fn makeZigConstName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 
             result.items[result.items.len - 1] != '_' and
             !prev_was_upper)
         {
-            try result.append('_');
+            try result.append(allocator, '_');
         }
 
         // Preserve single underscores
@@ -63,13 +63,13 @@ fn makeZigConstName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 
             result.items.len > 0 and
             result.items[result.items.len - 1] != '_')
         {
-            try result.append('_');
+            try result.append(allocator, '_');
             continue;
         }
 
         // Convert alphanumeric chars to uppercase
         if (std.ascii.isAlphanumeric(c)) {
-            try result.append(std.ascii.toUpper(c));
+            try result.append(allocator, std.ascii.toUpper(c));
         }
     }
 
@@ -78,39 +78,39 @@ fn makeZigConstName(allocator: std.mem.Allocator, name: []const u8) ![]const u8 
         _ = result.pop();
     }
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 /// Convert a name to snake_case for struct fields
 fn makeZigSnakeCase(allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    errdefer result.deinit();
+    var result = try std.ArrayList(u8).initCapacity(allocator, name.len * 2);
+    defer result.deinit(allocator);
 
     // Convert input to snake_case
     for (name, 0..) |c, i| {
         if (i == 0) {
             // First character must be a-zA-Z_
             if (std.ascii.isDigit(c)) {
-                try result.append('_');
+                try result.append(allocator, '_');
             }
             if (std.ascii.isAlphabetic(c) or std.ascii.isDigit(c) or c == '_') {
-                try result.appendSlice(&.{std.ascii.toLower(c)});
+                try result.appendSlice(allocator, &.{std.ascii.toLower(c)});
             } else {
-                try result.append('_');
+                try result.append(allocator, '_');
             }
             continue;
         }
 
         // Add underscore before capital letters (camelCase -> snake_case)
         if (std.ascii.isUpper(c) and i > 0 and result.items[result.items.len - 1] != '_') {
-            try result.append('_');
+            try result.append(allocator, '_');
         }
 
         // Convert to lowercase and handle special characters
         if (std.ascii.isAlphanumeric(c)) {
-            try result.appendSlice(&.{std.ascii.toLower(c)});
+            try result.appendSlice(allocator, &.{std.ascii.toLower(c)});
         } else {
-            try result.append('_');
+            try result.append(allocator, '_');
         }
 
         // Collapse multiple underscores
@@ -123,7 +123,7 @@ fn makeZigSnakeCase(allocator: std.mem.Allocator, name: []const u8) ![]const u8 
     }
 
     // Append underscore to keyword names
-    const slice = try result.toOwnedSlice();
+    const slice = try result.toOwnedSlice(allocator);
     if (isKeyword(slice)) {
         const with_underscore = try std.fmt.allocPrint(allocator, "{s}_", .{slice});
         allocator.free(slice);
@@ -134,8 +134,8 @@ fn makeZigSnakeCase(allocator: std.mem.Allocator, name: []const u8) ![]const u8 
 
 /// Convert a name to camelCase for methods or PascalCase for types
 fn makeZigCamelCase(allocator: std.mem.Allocator, name: []const u8, start_upper: bool) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    errdefer result.deinit();
+    var result = try std.ArrayList(u8).initCapacity(allocator, name.len * 2);
+    errdefer result.deinit(allocator);
 
     var capitalize_next = false;
 
@@ -143,16 +143,16 @@ fn makeZigCamelCase(allocator: std.mem.Allocator, name: []const u8, start_upper:
         if (i == 0) {
             // Handle first character
             if (std.ascii.isDigit(c)) {
-                try result.append('_');
+                try result.append(allocator, '_');
             }
             if (std.ascii.isAlphabetic(c) or std.ascii.isDigit(c) or c == '_') {
                 if (start_upper) {
-                    try result.appendSlice(&.{std.ascii.toUpper(c)});
+                    try result.appendSlice(allocator, &.{std.ascii.toUpper(c)});
                 } else {
-                    try result.appendSlice(&.{std.ascii.toLower(c)});
+                    try result.appendSlice(allocator, &.{std.ascii.toLower(c)});
                 }
             } else {
-                try result.append('_');
+                try result.append(allocator, '_');
             }
             continue;
         }
@@ -164,15 +164,15 @@ fn makeZigCamelCase(allocator: std.mem.Allocator, name: []const u8, start_upper:
         }
 
         if (capitalize_next) {
-            try result.appendSlice(&.{std.ascii.toUpper(c)});
+            try result.appendSlice(allocator, &.{std.ascii.toUpper(c)});
             capitalize_next = false;
         } else {
-            try result.append(c);
+            try result.append(allocator, c);
         }
     }
 
     // Append underscore to keyword names
-    const slice = try result.toOwnedSlice();
+    const slice = try result.toOwnedSlice(allocator);
     if (isKeyword(slice)) {
         const with_underscore = try std.fmt.allocPrint(allocator, "{s}_", .{slice});
         allocator.free(slice);
@@ -196,7 +196,7 @@ fn getUnusedName(allocator: std.mem.Allocator, used_names: *std.ArrayList([]cons
     // Try base name first
     if (!containsName(used_names, base_name)) {
         const result = try allocator.dupe(u8, base_name);
-        try used_names.append(result);
+        try used_names.append(allocator, result);
         return result;
     }
 
@@ -206,7 +206,7 @@ fn getUnusedName(allocator: std.mem.Allocator, used_names: *std.ArrayList([]cons
         const new_name = try std.fmt.allocPrint(allocator, "{s}{d}", .{ base_name, counter });
 
         if (!containsName(used_names, new_name)) {
-            try used_names.append(new_name);
+            try used_names.append(allocator, new_name);
             return new_name;
         }
 
@@ -261,9 +261,9 @@ pub fn importAlias(allocator: std.mem.Allocator, proto_name: []const u8, used_na
 
 test "naming conventions" {
     const allocator = std.testing.allocator;
-    var used_names = std.ArrayList([]const u8).init(allocator);
+    var used_names = try std.ArrayList([]const u8).initCapacity(allocator, 32);
     defer {
-        used_names.deinit();
+        used_names.deinit(allocator);
     }
 
     // Test constName

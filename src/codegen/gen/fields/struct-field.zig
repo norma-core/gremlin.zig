@@ -19,9 +19,9 @@
 // Created by ab, 12.11.2024
 
 const std = @import("std");
-const Message =  @import("../../../parser/main.zig").Message;
-const fields =  @import("../../../parser/main.zig").fields;
-const FieldType =  @import("../../../parser/main.zig").FieldType;
+const Message = @import("../../../parser/main.zig").Message;
+const fields = @import("../../../parser/main.zig").fields;
+const FieldType = @import("../../../parser/main.zig").FieldType;
 
 /// Import all specialized field type implementations
 const field_types = struct {
@@ -158,7 +158,7 @@ pub const FieldBuilder = struct {
                     reader_struct_name,
                 );
 
-            try fields_list.append(field);
+            try fields_list.append(allocator, field);
         }
     }
 
@@ -182,7 +182,7 @@ pub const FieldBuilder = struct {
                     writer_struct_name,
                     reader_struct_name,
                 );
-                try fields_list.append(field);
+                try fields_list.append(allocator, field);
             }
         }
     }
@@ -206,7 +206,7 @@ pub const FieldBuilder = struct {
                 writer_struct_name,
                 reader_struct_name,
             );
-            try fields_list.append(Field{ .map = field });
+            try fields_list.append(allocator, Field{ .map = field });
         }
     }
 

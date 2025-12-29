@@ -18,9 +18,9 @@
 // Created by ab, 11.11.2024
 
 const std = @import("std");
-const ProtoFile =  @import("../../parser/main.zig").ProtoFile;
-const Enum =  @import("../../parser/main.zig").Enum;
-const Message =  @import("../../parser/main.zig").Message;
+const ProtoFile = @import("../../parser/main.zig").ProtoFile;
+const Enum = @import("../../parser/main.zig").Enum;
+const Message = @import("../../parser/main.zig").Message;
 
 const ZigEnum = @import("./enum.zig").ZigEnum;
 const ZigStruct = @import("./struct.zig").ZigStruct;
@@ -72,26 +72,26 @@ pub const ZigFile = struct {
         project_root: []const u8,
     ) !ZigFile {
         // Track names to avoid conflicts
-        var names = std.ArrayList([]const u8).init(allocator);
-        defer names.deinit();
+        var names = try std.ArrayList([]const u8).initCapacity(allocator, 128);
+        defer names.deinit(allocator);
 
         // Initialize components with proper cleanup on error
         var imports = try initImports(allocator, file, proto_root, target_root, project_root, &names);
         errdefer {
             for (imports.items) |*import_ref| import_ref.deinit();
-            imports.deinit();
+            imports.deinit(allocator);
         }
 
         var enums = try initEnums(allocator, file, &names);
         errdefer {
             for (enums.items) |*enum_item| enum_item.deinit();
-            enums.deinit();
+            enums.deinit(allocator);
         }
 
         var structs = try initStructs(allocator, file, &names);
         errdefer {
             for (structs.items) |*struct_item| struct_item.deinit();
-            structs.deinit();
+            structs.deinit(allocator);
         }
 
         return ZigFile{
@@ -137,13 +137,13 @@ pub const ZigFile = struct {
     /// Clean up all allocated resources associated with this file.
     pub fn deinit(self: *ZigFile) void {
         for (self.imports.items) |*import_ref| import_ref.deinit();
-        self.imports.deinit();
+        self.imports.deinit(self.allocator);
 
         for (self.enums.items) |*enum_item| enum_item.deinit();
-        self.enums.deinit();
+        self.enums.deinit(self.allocator);
 
         for (self.structs.items) |*struct_item| struct_item.deinit();
-        self.structs.deinit();
+        self.structs.deinit(self.allocator);
 
         self.allocator.free(self.out_path);
     }
@@ -261,11 +261,11 @@ pub const ZigFile = struct {
         var gremlin_import = try import.ZigImport.init(allocator, null, "gremlin", "gremlin");
         errdefer gremlin_import.deinit();
 
-        try imports.append(std_import);
-        try imports.append(gremlin_import);
+        try imports.append(allocator, std_import);
+        try imports.append(allocator, gremlin_import);
 
-        try names.append(std_import.alias);
-        try names.append(gremlin_import.alias);
+        try names.append(allocator, std_import.alias);
+        try names.append(allocator, gremlin_import.alias);
     }
 
     /// Initialize all imports for the file
@@ -277,8 +277,8 @@ pub const ZigFile = struct {
         project_root: []const u8,
         names: *std.ArrayList([]const u8),
     ) !std.ArrayList(import.ZigImport) {
-        var imports = std.ArrayList(import.ZigImport).init(allocator);
-        errdefer imports.deinit();
+        var imports = try std.ArrayList(import.ZigImport).initCapacity(allocator, 16);
+        errdefer imports.deinit(allocator);
 
         if (file.messages.items.len > 0) {
             try initSystemImports(allocator, &imports, names);
@@ -298,7 +298,7 @@ pub const ZigFile = struct {
                 file.path.?,
                 names,
             );
-            try imports.append(resolved);
+            try imports.append(allocator, resolved);
         }
 
         return imports;
@@ -310,10 +310,10 @@ pub const ZigFile = struct {
         file: *const ProtoFile,
         names: *std.ArrayList([]const u8),
     ) !std.ArrayList(ZigEnum) {
-        var enums = std.ArrayList(ZigEnum).init(allocator);
+        var enums = try std.ArrayList(ZigEnum).initCapacity(allocator, 128);
         for (file.enums.items) |*enum_item| {
             const zig_enum = try ZigEnum.init(allocator, enum_item, "", names);
-            try enums.append(zig_enum);
+            try enums.append(allocator, zig_enum);
         }
         return enums;
     }
@@ -324,10 +324,10 @@ pub const ZigFile = struct {
         file: *const ProtoFile,
         names: *std.ArrayList([]const u8),
     ) !std.ArrayList(ZigStruct) {
-        var structs = std.ArrayList(ZigStruct).init(allocator);
+        var structs = try std.ArrayList(ZigStruct).initCapacity(allocator, 128);
         for (file.messages.items) |*msg| {
             const zig_struct = try ZigStruct.init(allocator, msg, names, "");
-            try structs.append(zig_struct);
+            try structs.append(allocator, zig_struct);
         }
         return structs;
     }

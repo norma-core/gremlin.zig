@@ -39,10 +39,12 @@ pub const FileOutput = struct {
     allocator: std.mem.Allocator,
     /// Current indentation depth (each level is Config.INDENT_SIZE spaces)
     depth: u32,
-    /// Buffered writer for improved I/O performance
-    buf_writer: std.io.BufferedWriter(Config.BUFFER_SIZE, std.fs.File.Writer),
     /// Underlying file handle
     file: std.fs.File,
+    /// Buffer for writer
+    buffer: [Config.BUFFER_SIZE]u8,
+    /// Writer interface
+    writer: std.io.Writer,
 
     /// Initialize a new FileOutput with the given allocator and path.
     /// Creates the necessary directory structure and opens the file for writing.
@@ -60,17 +62,20 @@ pub const FileOutput = struct {
         try std.fs.cwd().makePath(dir_path);
 
         // Create or truncate output file
-        var file = try std.fs.cwd().createFile(path, .{
+        const file = try std.fs.cwd().createFile(path, .{
             .truncate = true,
             .read = false,
         });
 
-        return FileOutput{
+        var result = FileOutput{
             .allocator = allocator,
             .depth = 0,
             .file = file,
-            .buf_writer = std.io.bufferedWriter(file.writer()),
+            .buffer = undefined,
+            .writer = undefined,
         };
+        result.writer = result.file.writer(&result.buffer).interface;
+        return result;
     }
 
     /// Writes the current indentation prefix based on depth.
@@ -78,9 +83,11 @@ pub const FileOutput = struct {
     ///
     /// Returns: Error if write operation fails
     pub fn writePrefix(self: *FileOutput) !void {
-        const writer = self.buf_writer.writer();
         const spaces = self.depth * Config.INDENT_SIZE;
-        try writer.writeByteNTimes(' ', spaces);
+        var i: usize = 0;
+        while (i < spaces) : (i += 1) {
+            try self.writer.writeByte(' ');
+        }
     }
 
     /// Writes a single-line comment with proper indentation.
@@ -91,11 +98,10 @@ pub const FileOutput = struct {
     ///
     /// Returns: Error if write operation fails
     pub fn writeComment(self: *FileOutput, comment: []const u8) !void {
-        const writer = self.buf_writer.writer();
         try self.writePrefix();
-        try writer.writeAll(Config.COMMENT_PREFIX);
-        try writer.writeAll(comment);
-        try writer.writeByte('\n');
+        try self.writer.writeAll(Config.COMMENT_PREFIX);
+        try self.writer.writeAll(comment);
+        try self.writer.writeByte('\n');
     }
 
     /// Flushes any buffered content and closes the file.
@@ -103,7 +109,6 @@ pub const FileOutput = struct {
     ///
     /// Returns: Error if flush operation fails
     pub fn close(self: *FileOutput) !void {
-        try self.buf_writer.flush();
         self.file.close();
     }
 
@@ -111,7 +116,7 @@ pub const FileOutput = struct {
     ///
     /// Returns: Error if write operation fails
     pub fn linebreak(self: *FileOutput) !void {
-        try self.buf_writer.writer().writeByte('\n');
+        try self.writer.writeByte('\n');
     }
 
     /// Writes a multi-line string with proper indentation for each line.
@@ -124,7 +129,7 @@ pub const FileOutput = struct {
     pub fn writeString(self: *FileOutput, value: []const u8) !void {
         // Generate indentation prefix
         var prefix = try self.createIndentPrefix();
-        defer prefix.deinit();
+        defer prefix.deinit(self.allocator);
 
         // Write lines with proper indentation
         try self.writeIndentedLines(value, prefix.items);
@@ -138,31 +143,30 @@ pub const FileOutput = struct {
     ///
     /// Returns: Error if write operation fails
     pub fn continueString(self: *FileOutput, value: []const u8) !void {
-        try self.buf_writer.writer().writeAll(value);
+        try self.writer.writeAll(value);
     }
 
     // Private helper functions
 
     /// Creates an indentation prefix based on current depth
     fn createIndentPrefix(self: *FileOutput) !std.ArrayList(u8) {
-        var prefix_list = std.ArrayList(u8).init(self.allocator);
-        errdefer prefix_list.deinit();
+        var prefix_list = try std.ArrayList(u8).initCapacity(self.allocator, self.depth * Config.INDENT_SIZE);
+        errdefer prefix_list.deinit(self.allocator);
 
         const spaces = self.depth * Config.INDENT_SIZE;
-        try prefix_list.appendNTimes(' ', spaces);
+        try prefix_list.appendNTimes(self.allocator, ' ', spaces);
 
         return prefix_list;
     }
 
     /// Writes lines with consistent indentation
     fn writeIndentedLines(self: *FileOutput, content: []const u8, prefix: []const u8) !void {
-        const writer = self.buf_writer.writer();
         var line_iterator = std.mem.splitSequence(u8, content, "\n");
 
         while (line_iterator.next()) |line| {
-            try writer.writeAll(prefix);
-            try writer.writeAll(line);
-            try writer.writeByte('\n');
+            try self.writer.writeAll(prefix);
+            try self.writer.writeAll(line);
+            try self.writer.writeByte('\n');
         }
     }
 };

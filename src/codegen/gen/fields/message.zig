@@ -20,8 +20,8 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const Option =  @import("../../../parser/main.zig").Option;
-const FieldType =  @import("../../../parser/main.zig").FieldType;
+const Option = @import("../../../parser/main.zig").Option;
+const FieldType = @import("../../../parser/main.zig").FieldType;
 
 /// Represents a Protocol Buffer message field in Zig.
 /// Message fields require special handling since they involve nested serialization
@@ -199,9 +199,9 @@ pub const ZigMessageField = struct {
 };
 
 test "basic message field" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -210,8 +210,8 @@ test "basic message field" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 0);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigMessageField.init(
         std.testing.allocator,

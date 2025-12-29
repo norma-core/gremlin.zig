@@ -19,7 +19,7 @@
 
 const std = @import("std");
 const naming = @import("fields/naming.zig");
-const Enum =  @import("../../parser/main.zig").Enum;
+const Enum = @import("../../parser/main.zig").Enum;
 
 /// Represents a single entry in a Zig enum definition.
 /// Each entry contains a constant name and its associated integer value.
@@ -78,10 +78,10 @@ pub const ZigEnum = struct {
         scope_name: []const u8,
         names: *std.ArrayList([]const u8),
     ) !ZigEnum {
-        var entriesList = std.ArrayList(ZigEnumEntry).init(allocator);
+        var entriesList = try std.ArrayList(ZigEnumEntry).initCapacity(allocator, src.fields.items.len);
         errdefer {
             for (entriesList.items) |*entry| entry.deinit();
-            entriesList.deinit();
+            entriesList.deinit(allocator);
         }
 
         // Process enum fields
@@ -114,9 +114,9 @@ pub const ZigEnum = struct {
     ///
     /// Returns: A newly allocated string containing the Zig enum code
     pub fn createEnumDef(self: *const ZigEnum, allocator: std.mem.Allocator) ![]const u8 {
-        var buffer = std.ArrayList(u8).init(allocator);
-        errdefer buffer.deinit();
-        const writer = buffer.writer();
+        var buffer = try std.ArrayList(u8).initCapacity(allocator, 1024);
+        errdefer buffer.deinit(allocator);
+        var writer = buffer.writer(allocator);
 
         try writer.print("pub const {s} = enum(i32) {{\n", .{self.const_name});
 
@@ -126,7 +126,7 @@ pub const ZigEnum = struct {
         }
 
         try writer.writeAll("};\n");
-        return buffer.toOwnedSlice();
+        return buffer.toOwnedSlice(allocator);
     }
 
     /// Frees all resources associated with this enum definition.
@@ -136,7 +136,7 @@ pub const ZigEnum = struct {
         }
         self.allocator.free(self.const_name);
         self.allocator.free(self.full_name);
-        self.entries.deinit();
+        self.entries.deinit(self.allocator);
     }
 
     // Internal helper functions
@@ -148,8 +148,8 @@ pub const ZigEnum = struct {
         src: *const Enum,
         entriesList: *std.ArrayList(ZigEnumEntry),
     ) !bool {
-        var entries_names = std.ArrayList([]const u8).init(allocator);
-        defer entries_names.deinit();
+        var entries_names = try std.ArrayList([]const u8).initCapacity(allocator, src.fields.items.len);
+        defer entries_names.deinit(allocator);
 
         var has_zero_value = false;
 
@@ -158,7 +158,7 @@ pub const ZigEnum = struct {
                 has_zero_value = true;
             }
             const field_name = try naming.enumFieldName(allocator, field.name, &entries_names);
-            try entriesList.append(try ZigEnumEntry.init(allocator, field_name, field.index));
+            try entriesList.append(allocator, try ZigEnumEntry.init(allocator, field_name, field.index));
         }
 
         return has_zero_value;
@@ -169,10 +169,10 @@ pub const ZigEnum = struct {
         allocator: std.mem.Allocator,
         entriesList: *std.ArrayList(ZigEnumEntry),
     ) !void {
-        var entries_names = std.ArrayList([]const u8).init(allocator);
-        defer entries_names.deinit();
+        var entries_names = try std.ArrayList([]const u8).initCapacity(allocator, 1);
+        defer entries_names.deinit(allocator);
 
-        try entriesList.append(ZigEnumEntry{
+        try entriesList.append(allocator, ZigEnumEntry{
             .allocator = allocator,
             .constName = try naming.enumFieldName(allocator, "___protobuf_unknown", &entries_names),
             .value = 0,
@@ -193,7 +193,7 @@ pub const ZigEnum = struct {
 };
 
 test "enum generation" {
-    const ParserBuffer =  @import("../../parser/main.zig").ParserBuffer;
+    const ParserBuffer = @import("../../parser/main.zig").ParserBuffer;
     var buf = ParserBuffer.init(
         \\enum ForeignEnum {
         \\    FOREIGN_FOO = 0;
@@ -204,8 +204,8 @@ test "enum generation" {
     var result = try Enum.parse(std.testing.allocator, &buf, null) orelse unreachable;
     defer result.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 16);
+    defer names.deinit(std.testing.allocator);
 
     var zig_enum = try ZigEnum.init(std.testing.allocator, &result, "", &names);
     const code = try zig_enum.createEnumDef(std.testing.allocator);

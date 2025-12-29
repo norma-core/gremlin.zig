@@ -20,7 +20,7 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const Option =  @import("../../../parser/main.zig").Option;
+const Option = @import("../../../parser/main.zig").Option;
 
 /// Formats a string literal for use in Zig code, properly escaping special characters
 /// and converting to hexadecimal representation where necessary. This is particularly
@@ -32,39 +32,39 @@ const Option =  @import("../../../parser/main.zig").Option;
 /// Returns:
 ///     Formatted string with proper escaping, suitable for use in Zig code
 fn formatStringLiteral(allocator: std.mem.Allocator, str: []const u8) ![]const u8 {
-    var result = std.ArrayList(u8).init(allocator);
-    defer result.deinit();
+    var result = try std.ArrayList(u8).initCapacity(allocator, str.len * 2);
+    defer result.deinit(allocator);
 
     // Remove surrounding quotes from input
     const cropped = str[1 .. str.len - 1];
-    try result.appendSlice("\"");
+    try result.appendSlice(allocator, "\"");
 
     // Process each character, applying appropriate escaping
     for (cropped) |c| {
         switch (c) {
             // Control characters
-            0 => try result.appendSlice("\\x00"),
-            1 => try result.appendSlice("\\x01"),
-            7 => try result.appendSlice("\\a"),
-            8 => try result.appendSlice("\\b"),
-            12 => try result.appendSlice("\\f"),
-            '\n' => try result.appendSlice("\\n"),
-            '\r' => try result.appendSlice("\\r"),
-            '\t' => try result.appendSlice("\\t"),
-            11 => try result.appendSlice("\\v"),
+            0 => try result.appendSlice(allocator, "\\x00"),
+            1 => try result.appendSlice(allocator, "\\x01"),
+            7 => try result.appendSlice(allocator, "\\a"),
+            8 => try result.appendSlice(allocator, "\\b"),
+            12 => try result.appendSlice(allocator, "\\f"),
+            '\n' => try result.appendSlice(allocator, "\\n"),
+            '\r' => try result.appendSlice(allocator, "\\r"),
+            '\t' => try result.appendSlice(allocator, "\\t"),
+            11 => try result.appendSlice(allocator, "\\v"),
 
             // Special characters that need escaping
-            '\\' => try result.appendSlice("\\\\"),
-            '\'' => try result.appendSlice("\\'"),
-            '"' => try result.appendSlice("\\\""),
+            '\\' => try result.appendSlice(allocator, "\\\\"),
+            '\'' => try result.appendSlice(allocator, "\\'"),
+            '"' => try result.appendSlice(allocator, "\\\""),
 
             // All other characters are converted to hex for consistent representation
-            else => try std.fmt.format(result.writer(), "\\x{X:0>2}", .{c}),
+            else => try std.fmt.format(result.writer(allocator), "\\x{X:0>2}", .{c}),
         }
     }
-    try result.appendSlice("\"");
+    try result.appendSlice(allocator, "\"");
 
-    return result.toOwnedSlice();
+    return result.toOwnedSlice(allocator);
 }
 
 /// Represents a Protocol Buffer bytes/string field in Zig, managing both reading and writing
@@ -255,9 +255,9 @@ pub const ZigBytesField = struct {
 };
 
 test "basic bytes field" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -266,8 +266,8 @@ test "basic bytes field" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigBytesField.init(
         std.testing.allocator,
@@ -336,9 +336,9 @@ test "basic bytes field" {
 }
 
 test "bytes field with default" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -348,8 +348,8 @@ test "bytes field with default" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigBytesField.init(
         std.testing.allocator,

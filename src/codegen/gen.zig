@@ -100,21 +100,21 @@ pub fn generateProtobuf(
     project_root: []const u8,
 ) !void {
     // Parse all proto files
-    const parsed = try gremlin_parser.parse(allocator, proto_root);
+    var parsed = try gremlin_parser.parse(allocator, proto_root);
     defer parsed.deinit();
 
     // Create ZigFile instances
-    var files = std.ArrayList(ZigFile).init(allocator);
+    var files = try std.ArrayList(ZigFile).initCapacity(allocator, parsed.files.items.len);
     defer {
         for (files.items) |*file| {
             file.deinit();
         }
-        files.deinit();
+        files.deinit(allocator);
     }
 
     // Initialize files
     for (parsed.files.items) |*file| {
-        try files.append(try createFile(
+        try files.append(allocator, try createFile(
             allocator,
             file,
             proto_root,

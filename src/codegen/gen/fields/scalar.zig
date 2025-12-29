@@ -20,7 +20,7 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const Option =  @import("../../../parser/main.zig").Option;
+const Option = @import("../../../parser/main.zig").Option;
 
 /// Maps Protocol Buffer scalar types to their corresponding Zig types
 pub fn scalarZigType(proto_type: []const u8) []const u8 {
@@ -328,9 +328,9 @@ pub const ZigScalarField = struct {
 };
 
 test "basic field" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -339,8 +339,8 @@ test "basic field" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigScalarField.init(
         std.testing.allocator,
@@ -393,9 +393,9 @@ test "basic field" {
 }
 
 test "default field" {
-    const fields =  @import("../../../parser/main.zig").fields;
-    const ScopedName =  @import("../../../parser/main.zig").ScopedName;
-    const ParserBuffer =  @import("../../../parser/main.zig").ParserBuffer;
+    const fields = @import("../../../parser/main.zig").fields;
+    const ScopedName = @import("../../../parser/main.zig").ScopedName;
+    const ParserBuffer = @import("../../../parser/main.zig").ParserBuffer;
 
     var scope = try ScopedName.init(std.testing.allocator, "");
     defer scope.deinit();
@@ -404,8 +404,8 @@ test "default field" {
     var f = try fields.NormalField.parse(std.testing.allocator, scope, &buf);
     defer f.deinit();
 
-    var names = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer names.deinit();
+    var names = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 32);
+    defer names.deinit(std.testing.allocator);
 
     var zig_field = try ZigScalarField.init(
         std.testing.allocator,
