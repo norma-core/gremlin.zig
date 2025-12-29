@@ -158,7 +158,7 @@ pub const FieldType = struct {
 
 test "field type parsing - scalar types" {
     var buf = ParserBuffer.init("int32");
-    const scope = try ScopedName.init(std.testing.allocator, "test");
+    var scope = try ScopedName.init(std.testing.allocator, "test");
     defer scope.deinit();
 
     var field_type = try FieldType.parse(std.testing.allocator, scope, &buf);
@@ -171,7 +171,7 @@ test "field type parsing - scalar types" {
 
 test "field type parsing - bytes types" {
     var buf = ParserBuffer.init("bytes");
-    const scope = try ScopedName.init(std.testing.allocator, "test");
+    var scope = try ScopedName.init(std.testing.allocator, "test");
     defer scope.deinit();
 
     var field_type = try FieldType.parse(std.testing.allocator, scope, &buf);
@@ -184,7 +184,7 @@ test "field type parsing - bytes types" {
 
 test "field type parsing - message types" {
     var buf = ParserBuffer.init("MyMessage");
-    const scope = try ScopedName.init(std.testing.allocator, "test");
+    var scope = try ScopedName.init(std.testing.allocator, "test");
     defer scope.deinit();
 
     var field_type = try FieldType.parse(std.testing.allocator, scope, &buf);

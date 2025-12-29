@@ -88,11 +88,11 @@ pub const Option = struct {
 
         if (try buf.char() == ']') {
             buf.offset += 1;
-            return std.ArrayList(Option).init(allocator);
+            return try std.ArrayList(Option).initCapacity(allocator, 32);
         }
 
-        var res = std.ArrayList(Option).init(allocator);
-        errdefer res.deinit();
+        var res = try std.ArrayList(Option).initCapacity(allocator, 32);
+        errdefer res.deinit(allocator);
 
         while (true) {
             const start = buf.offset;
@@ -100,7 +100,7 @@ pub const Option = struct {
             try buf.assignment();
             const value = try lex.constant(buf);
 
-            try res.append(Option{
+            try res.append(allocator, Option{
                 .start = start,
                 .end = buf.offset,
                 .name = name,
@@ -177,8 +177,8 @@ test "option list" {
     // Test multiple options in a list
     var buf = ParserBuffer.init("[java_package = \"com.example.foo\", another = true]");
 
-    const opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
-    defer opts.deinit();
+    var opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
+    defer opts.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(2, opts.items.len);
 
@@ -193,8 +193,8 @@ test "float options" {
     // Test floating point option values
     var buf = ParserBuffer.init("[default = 51.5]");
 
-    const opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
-    defer opts.deinit();
+    var opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
+    defer opts.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(1, opts.items.len);
     try std.testing.expectEqualStrings("default", opts.items[0].name);
@@ -205,8 +205,8 @@ test "empty string options" {
     // Test empty string option values
     var buf = ParserBuffer.init("[default = \"\"]");
 
-    const opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
-    defer opts.deinit();
+    var opts = try Option.parseList(std.testing.allocator, &buf) orelse unreachable;
+    defer opts.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(1, opts.items.len);
     try std.testing.expectEqualStrings("default", opts.items[0].name);

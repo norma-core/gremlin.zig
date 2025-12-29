@@ -53,8 +53,6 @@ pub const ProtoFile = struct {
     enums: std.ArrayList(Enum),
     /// Message definitions
     messages: std.ArrayList(Message),
-    /// Service definitions
-    services: std.ArrayList(Service),
     /// Extend blocks
     extends: std.ArrayList(Extend),
 
@@ -76,12 +74,11 @@ pub const ProtoFile = struct {
         var syntax: ?Syntax = null;
         var package: ?Package = null;
         var edition: ?Edition = null;
-        var imports = std.ArrayList(Import).init(allocator);
-        var enums = std.ArrayList(Enum).init(allocator);
-        var messages = std.ArrayList(Message).init(allocator);
-        var options = std.ArrayList(Option).init(allocator);
-        var services = std.ArrayList(Service).init(allocator);
-        var extends = std.ArrayList(Extend).init(allocator);
+        var imports = try std.ArrayList(Import).initCapacity(allocator, 32);
+        var enums = try std.ArrayList(Enum).initCapacity(allocator, 32);
+        var messages = try std.ArrayList(Message).initCapacity(allocator, 32);
+        var options = try std.ArrayList(Option).initCapacity(allocator, 32);
+        var extends = try std.ArrayList(Extend).initCapacity(allocator, 32);
 
         // Parse syntax version if present
         if (try Syntax.parse(buf)) |s| {
@@ -115,32 +112,31 @@ pub const ProtoFile = struct {
             }
 
             if (try Import.parse(buf)) |i| {
-                try imports.append(i);
+                try imports.append(allocator, i);
                 found = true;
             }
 
             if (try Message.parse(allocator, buf, scope)) |m| {
-                try messages.append(m);
+                try messages.append(allocator, m);
                 found = true;
             }
 
             if (try Enum.parse(allocator, buf, scope)) |e| {
-                try enums.append(e);
+                try enums.append(allocator, e);
                 found = true;
             }
 
             if (try Option.parse(buf)) |o| {
-                try options.append(o);
+                try options.append(allocator, o);
                 found = true;
             }
 
-            if (try Service.parse(buf)) |s| {
-                try services.append(s);
+            if (try Service.parse(buf)) |_| {
                 found = true;
             }
 
             if (try Extend.parse(allocator, buf)) |e| {
-                try extends.append(e);
+                try extends.append(allocator, e);
                 found = true;
             }
 
@@ -169,7 +165,6 @@ pub const ProtoFile = struct {
             .enums = enums,
             .extends = extends,
             .messages = messages,
-            .services = services,
         };
     }
 
@@ -191,12 +186,11 @@ pub const ProtoFile = struct {
             p.deinit();
         }
 
-        self.options.deinit();
-        self.imports.deinit();
-        self.enums.deinit();
-        self.messages.deinit();
-        self.services.deinit();
-        self.extends.deinit();
+        self.options.deinit(self.allocator);
+        self.imports.deinit(self.allocator);
+        self.enums.deinit(self.allocator);
+        self.messages.deinit(self.allocator);
+        self.extends.deinit(self.allocator);
     }
 };
 
@@ -215,7 +209,6 @@ test "basic proto file" {
     try std.testing.expect(result.imports.items.len == 0);
     try std.testing.expect(result.enums.items.len == 0);
     try std.testing.expect(result.messages.items.len == 1);
-    try std.testing.expect(result.services.items.len == 0);
 }
 
 test "golden proto3" {

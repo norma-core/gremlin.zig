@@ -26,6 +26,7 @@ const lex = @import("lexems.zig");
 /// are available for extension fields. The declaration can include individual numbers
 /// and ranges (e.g., "extensions 4, 20 to 30;").
 pub const Extensions = struct {
+    allocator: std.mem.Allocator,
     /// Offset in the source where this extensions declaration begins
     start: usize,
     /// Offset in the source where this extensions declaration ends
@@ -56,13 +57,14 @@ pub const Extensions = struct {
         }
 
         // Parse the comma-separated list of ranges
-        const fields = try lex.parseRanges(allocator, buf);
-        errdefer fields.deinit();
+        var fields = try lex.parseRanges(allocator, buf);
+        errdefer fields.deinit(allocator);
 
         // Expect a semicolon at the end
         try buf.semicolon();
 
         return Extensions{
+            .allocator = allocator,
             .start = start,
             .end = buf.offset,
             .items = fields,
@@ -73,7 +75,7 @@ pub const Extensions = struct {
     /// Must be called when the Extensions is no longer needed.
     pub fn deinit(self: *Extensions) void {
         // Free each range string and the ArrayList itself
-        self.items.deinit();
+        self.items.deinit(self.allocator);
     }
 
     /// Returns true if this extensions declaration contains the given field number

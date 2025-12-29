@@ -29,6 +29,7 @@ const ScopedName = @import("scoped-name.zig").ScopedName;
 /// EnumField represents a single field within an enum declaration.
 /// Example: FOO = 1 [deprecated = true];
 pub const EnumField = struct {
+    allocator: std.mem.Allocator,
     /// Starting position in source
     start: usize,
     /// Ending position in source
@@ -65,11 +66,11 @@ pub const EnumField = struct {
 
         // Parse optional field options
         const opts = try Option.parseList(allocator, buf);
-        errdefer if (opts) |*o| o.deinit();
 
         try buf.semicolon();
 
         return EnumField{
+            .allocator = allocator,
             .start = start,
             .end = buf.offset,
             .name = name,
@@ -81,7 +82,7 @@ pub const EnumField = struct {
     /// Free all memory associated with the enum field
     pub fn deinit(self: *EnumField) void {
         if (self.options) |*opts| {
-            opts.deinit();
+            opts.deinit(self.allocator);
         }
     }
 };
@@ -89,6 +90,7 @@ pub const EnumField = struct {
 /// Enum represents a complete Protocol Buffer enum declaration, including
 /// its name, fields, options, and reserved ranges.
 pub const Enum = struct {
+    allocator: std.mem.Allocator,
     /// Starting position in source
     start: usize,
     /// Ending position in source
@@ -136,15 +138,15 @@ pub const Enum = struct {
         try buf.openBracket();
 
         // Initialize containers for enum contents
-        var opts = std.ArrayList(Option).init(allocator);
-        var fields = std.ArrayList(EnumField).init(allocator);
-        var reserved = std.ArrayList(Reserved).init(allocator);
+        var opts = try std.ArrayList(Option).initCapacity(allocator, 1);
+        var fields = try std.ArrayList(EnumField).initCapacity(allocator, 32);
+        var reserved = try std.ArrayList(Reserved).initCapacity(allocator, 1);
         errdefer {
-            opts.deinit();
+            opts.deinit(allocator);
             for (fields.items) |*field| field.deinit();
-            fields.deinit();
+            fields.deinit(allocator);
             for (reserved.items) |*res| res.deinit();
-            reserved.deinit();
+            reserved.deinit(allocator);
         }
 
         // Handle empty enum
@@ -158,11 +160,11 @@ pub const Enum = struct {
 
                 // Try parsing each possible enum element
                 if (try Option.parse(buf)) |opt| {
-                    try opts.append(opt);
+                    try opts.append(allocator, opt);
                 } else if (try Reserved.parse(allocator, buf)) |res| {
-                    try reserved.append(res);
+                    try reserved.append(allocator, res);
                 } else if (try EnumField.parse(allocator, buf)) |field| {
-                    try fields.append(field);
+                    try fields.append(allocator, field);
                 }
 
                 // Check for end of enum
@@ -184,6 +186,7 @@ pub const Enum = struct {
             try ScopedName.init(allocator, name);
 
         return Enum{
+            .allocator = allocator,
             .start = offset,
             .end = buf.offset,
             .name = scoped,
@@ -196,15 +199,15 @@ pub const Enum = struct {
     /// Free all memory associated with the enum
     pub fn deinit(self: *Enum) void {
         self.name.deinit();
-        self.options.deinit();
+        self.options.deinit(self.allocator);
         for (self.fields.items) |*field| {
             field.deinit();
         }
-        self.fields.deinit();
+        self.fields.deinit(self.allocator);
         for (self.reserved.items) |*res| {
             res.deinit();
         }
-        self.reserved.deinit();
+        self.reserved.deinit(self.allocator);
     }
 
     /// Find a field by name

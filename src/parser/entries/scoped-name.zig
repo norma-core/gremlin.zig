@@ -60,9 +60,9 @@ pub const ScopedName = struct {
             const rest = iter.rest();
             var rest_parts = std.mem.splitScalar(u8, rest, '.');
 
-            var parent = std.ArrayList([]const u8).init(allocator);
+            var parent = try std.ArrayList([]const u8).initCapacity(allocator, 32);
             while (rest_parts.next()) |part| {
-                try parent.append(part);
+                try parent.append(allocator, part);
             }
 
             return ScopedName{
@@ -85,7 +85,7 @@ pub const ScopedName = struct {
     /// Creates a deep copy of the ScopedName
     pub fn clone(self: ScopedName) ScopedNameError!ScopedName {
         if (self.parent) |*p| {
-            const parent = try p.clone();
+            const parent = try p.clone(self.allocator);
             return ScopedName{
                 .allocator = self.allocator,
                 .name = self.name,
@@ -110,8 +110,8 @@ pub const ScopedName = struct {
         const full = try std.mem.concat(self.allocator, u8, &[_][]const u8{ self.full, ".", name });
 
         if (self.parent) |*p| {
-            var parent = try p.clone();
-            try parent.append(self.name);
+            var parent = try p.clone(self.allocator);
+            try parent.append(self.allocator, self.name);
 
             return ScopedName{
                 .allocator = self.allocator,
@@ -121,8 +121,8 @@ pub const ScopedName = struct {
                 .full_owned = true,
             };
         } else {
-            var parent = std.ArrayList([]const u8).init(self.allocator);
-            try parent.append(self.name);
+            var parent = try std.ArrayList([]const u8).initCapacity(self.allocator, 1);
+            try parent.append(self.allocator, self.name);
 
             return ScopedName{
                 .allocator = self.allocator,
@@ -142,7 +142,7 @@ pub const ScopedName = struct {
                 return null;
             }
 
-            var parent = try p.clone();
+            var parent = try p.clone(self.allocator);
             const name = parent.pop().?;
             const full = try std.mem.join(self.allocator, ".", p.items);
 
@@ -179,7 +179,7 @@ pub const ScopedName = struct {
 
     /// Resolves this name relative to a target scope
     /// For example: "Message".toScope("pkg.sub") -> "pkg.sub.Message"
-    pub fn toScope(self: ScopedName, target: ScopedName) ScopedNameError!ScopedName {
+    pub fn toScope(self: ScopedName, target: *ScopedName) ScopedNameError!ScopedName {
         if (target.full.len == 0) {
             return self.clone();
         }
@@ -187,20 +187,20 @@ pub const ScopedName = struct {
             return self.clone();
         }
 
-        var path = std.ArrayList([]const u8).init(self.allocator);
-        defer path.deinit();
+        var path = try std.ArrayList([]const u8).initCapacity(self.allocator, 32);
+        defer path.deinit(self.allocator);
 
         // Build full path by combining target scope and name
         if (target.parent) |*p| {
-            try path.appendSlice(p.items);
+            try path.appendSlice(self.allocator, p.items);
         }
         if (target.name.len > 0) {
-            try path.append(target.name);
+            try path.append(self.allocator, target.name);
         }
         if (self.parent) |*p| {
-            try path.appendSlice(p.items);
+            try path.appendSlice(self.allocator, p.items);
         }
-        try path.append(self.name);
+        try path.append(self.allocator, self.name);
 
         const full = try std.mem.join(self.allocator, ".", path.items);
 
@@ -211,9 +211,9 @@ pub const ScopedName = struct {
     }
 
     /// Frees all resources owned by the ScopedName
-    pub fn deinit(self: ScopedName) void {
+    pub fn deinit(self: *ScopedName) void {
         if (self.parent) |*p| {
-            p.deinit();
+            p.deinit(self.allocator);
         }
         if (self.full_owned) {
             self.allocator.free(self.full);
@@ -222,7 +222,7 @@ pub const ScopedName = struct {
 };
 
 test "basic scoped name" {
-    const name = try ScopedName.init(std.testing.allocator, "foo");
+    var name = try ScopedName.init(std.testing.allocator, "foo");
     defer name.deinit();
     try std.testing.expectEqual(null, name.parent);
     try std.testing.expectEqualStrings("foo", name.name);
@@ -230,7 +230,7 @@ test "basic scoped name" {
 }
 
 test "scoped name with parent" {
-    const name = try ScopedName.init(std.testing.allocator, "foo.bar");
+    var name = try ScopedName.init(std.testing.allocator, "foo.bar");
     defer name.deinit();
     try std.testing.expectEqualStrings("bar", name.name);
     try std.testing.expectEqualStrings("foo.bar", name.full);
@@ -241,29 +241,29 @@ test "scoped name with parent" {
 test "scoped name operations" {
     // Test child creation
     {
-        const parent = try ScopedName.init(std.testing.allocator, "foo");
+        var parent = try ScopedName.init(std.testing.allocator, "foo");
         defer parent.deinit();
-        const child_name = try parent.child("bar");
+        var child_name = try parent.child("bar");
         defer child_name.deinit();
         try std.testing.expectEqualStrings("foo.bar", child_name.full);
     }
 
     // Test parent retrieval
     {
-        const name = try ScopedName.init(std.testing.allocator, "foo.bar.baz");
+        var name = try ScopedName.init(std.testing.allocator, "foo.bar.baz");
         defer name.deinit();
-        const parent = try name.getParent();
+        var parent = try name.getParent();
         defer parent.?.deinit();
         try std.testing.expectEqualStrings("foo.bar", parent.?.full);
     }
 
     // Test scope resolution
     {
-        const name = try ScopedName.init(std.testing.allocator, "Message");
+        var name = try ScopedName.init(std.testing.allocator, "Message");
         defer name.deinit();
-        const scope = try ScopedName.init(std.testing.allocator, "pkg.sub");
+        var scope = try ScopedName.init(std.testing.allocator, "pkg.sub");
         defer scope.deinit();
-        const resolved = try name.toScope(scope);
+        var resolved = try name.toScope(&scope);
         defer resolved.deinit();
         try std.testing.expectEqualStrings("pkg.sub.Message", resolved.full);
     }

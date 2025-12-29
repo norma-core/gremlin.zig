@@ -52,7 +52,7 @@ pub const Package = struct {
             return null;
         }
 
-        const name = try fullScopedName(allocator, buf);
+        var name = try fullScopedName(allocator, buf);
         errdefer name.deinit();
 
         try buf.semicolon();
@@ -65,7 +65,7 @@ pub const Package = struct {
     }
 
     /// Frees the memory allocated for the package name
-    pub fn deinit(self: *const Package) void {
+    pub fn deinit(self: *Package) void {
         self.name.deinit();
     }
 };
@@ -74,7 +74,7 @@ test "package parsing" {
     // Test case 1: Basic package declaration
     {
         var buf = ParserBuffer.init("package my.package;");
-        const pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
+        var pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
         defer pkg.deinit();
 
         try std.testing.expectEqual(0, pkg.start);
@@ -85,7 +85,7 @@ test "package parsing" {
     // Test case 2: Package with extra whitespace
     {
         var buf = ParserBuffer.init("package  my.package  ;");
-        const pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
+        var pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
         defer pkg.deinit();
 
         try std.testing.expectEqualStrings(".my.package", pkg.name.full);
@@ -101,7 +101,7 @@ test "package parsing" {
     // Test case 4: Package with deeply nested namespace
     {
         var buf = ParserBuffer.init("package com.example.project.submodule;");
-        const pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
+        var pkg = try Package.parse(std.testing.allocator, &buf) orelse unreachable;
         defer pkg.deinit();
 
         try std.testing.expectEqualStrings(".com.example.project.submodule", pkg.name.full);

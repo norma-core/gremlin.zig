@@ -113,14 +113,14 @@ const ImportResolver = struct {
     }
 
     fn propagatePublicImports(
-        _: *ImportResolver,
+        self: *ImportResolver,
         file: *ProtoFile,
         target: *ProtoFile,
     ) !void {
         for (target.imports.items) |*target_import| {
             if (target_import.i_type != import.ImportType.public) continue;
 
-            try file.imports.append(import.Import{
+            try file.imports.append(self.allocator, import.Import{
                 .start = 0,
                 .end = 0,
                 .path = target_import.path,

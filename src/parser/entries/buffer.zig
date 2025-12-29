@@ -90,13 +90,13 @@ pub const ParserBuffer = struct {
         if (self.offset + 1 >= self.buf.len) return Error.UnexpectedEOF;
 
         switch (self.buf[self.offset + 1]) {
-        // Single-line comment
+            // Single-line comment
             '/' => {
-            while (self.offset < self.buf.len and (try self.char()) != '\n') {
-                self.offset += 1;
-            }
-            try self.skipSpaces();
-        },
+                while (self.offset < self.buf.len and (try self.char()) != '\n') {
+                    self.offset += 1;
+                }
+                try self.skipSpaces();
+            },
             // Multi-line comment
             '*' => {
                 self.offset += 2;
@@ -105,7 +105,8 @@ pub const ParserBuffer = struct {
 
                     if (self.buf[self.offset] == '*' and
                         self.offset + 1 < self.buf.len and
-                        self.buf[self.offset + 1] == '/') {
+                        self.buf[self.offset + 1] == '/')
+                    {
                         self.offset += 2;
                         try self.skipSpaces();
                         break;

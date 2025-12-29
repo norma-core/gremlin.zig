@@ -67,6 +67,8 @@ pub const Message = struct {
     /// Parent message (if nested)
     parent: ?*Message = null,
 
+    allocator: std.mem.Allocator,
+
     /// Parses a message definition including all its contents.
     /// Handles nested messages, enums, fields, and all other valid
     /// message elements.
@@ -103,17 +105,16 @@ pub const Message = struct {
         }
 
         // Initialize storage for message elements
-        var options = std.ArrayList(Option).init(allocator);
-        var oneofs = std.ArrayList(fields.MessageOneOfField).init(allocator);
-        var maps = std.ArrayList(fields.MessageMapField).init(allocator);
-        var mfields = std.ArrayList(fields.NormalField).init(allocator);
-        var enums = std.ArrayList(Enum).init(allocator);
-        var messages = std.ArrayList(Message).init(allocator);
-        var reserved = std.ArrayList(Reserved).init(allocator);
-        var extensions = std.ArrayList(Extensions).init(allocator);
-        var extends = std.ArrayList(Extend).init(allocator);
-        var groups = std.ArrayList(Group).init(allocator);
-
+        var options = try std.ArrayList(Option).initCapacity(allocator, 32);
+        var oneofs = try std.ArrayList(fields.MessageOneOfField).initCapacity(allocator, 32);
+        var maps = try std.ArrayList(fields.MessageMapField).initCapacity(allocator, 32);
+        var mfields = try std.ArrayList(fields.NormalField).initCapacity(allocator, 32);
+        var enums = try std.ArrayList(Enum).initCapacity(allocator, 32);
+        var messages = try std.ArrayList(Message).initCapacity(allocator, 32);
+        var reserved = try std.ArrayList(Reserved).initCapacity(allocator, 32);
+        var extensions = try std.ArrayList(Extensions).initCapacity(allocator, 32);
+        var extends = try std.ArrayList(Extend).initCapacity(allocator, 32);
+        var groups = try std.ArrayList(Group).initCapacity(allocator, 32);
         // Parse message contents until closing brace
         while (true) {
             try buf.skipSpaces();
@@ -128,26 +129,26 @@ pub const Message = struct {
 
             // Try parsing each possible message element
             if (try Option.parse(buf)) |opt| {
-                try options.append(opt);
+                try options.append(allocator, opt);
             } else if (try fields.MessageOneOfField.parse(allocator, scoped, buf)) |oneof| {
-                try oneofs.append(oneof);
+                try oneofs.append(allocator, oneof);
             } else if (try fields.MessageMapField.parse(allocator, scoped, buf)) |map| {
-                try maps.append(map);
+                try maps.append(allocator, map);
             } else if (try Reserved.parse(allocator, buf)) |res| {
-                try reserved.append(res);
+                try reserved.append(allocator, res);
             } else if (try Extensions.parse(allocator, buf)) |res| {
-                try extensions.append(res);
+                try extensions.append(allocator, res);
             } else if (try Extend.parse(allocator, buf)) |res| {
-                try extends.append(res);
+                try extends.append(allocator, res);
             } else if (try Group.parse(buf)) |res| {
-                try groups.append(res);
+                try groups.append(allocator, res);
             } else if (try Enum.parse(allocator, buf, scoped)) |en| {
-                try enums.append(en);
+                try enums.append(allocator, en);
             } else if (try Message.parse(allocator, buf, scoped)) |msg| {
-                try messages.append(msg);
+                try messages.append(allocator, msg);
             } else {
                 // If none of the above, must be a normal field
-                try mfields.append(try fields.NormalField.parse(allocator, scoped, buf));
+                try mfields.append(allocator, try fields.NormalField.parse(allocator, scoped, buf));
             }
         }
 
@@ -165,6 +166,7 @@ pub const Message = struct {
             .groups = groups,
             .enums = enums,
             .messages = messages,
+            .allocator = allocator,
         };
     }
 
@@ -196,16 +198,16 @@ pub const Message = struct {
         }
 
         self.name.deinit();
-        self.options.deinit();
-        self.oneofs.deinit();
-        self.maps.deinit();
-        self.fields.deinit();
-        self.reserved.deinit();
-        self.enums.deinit();
-        self.messages.deinit();
-        self.extensions.deinit();
-        self.extends.deinit();
-        self.groups.deinit();
+        self.options.deinit(self.allocator);
+        self.oneofs.deinit(self.allocator);
+        self.maps.deinit(self.allocator);
+        self.fields.deinit(self.allocator);
+        self.reserved.deinit(self.allocator);
+        self.enums.deinit(self.allocator);
+        self.messages.deinit(self.allocator);
+        self.extensions.deinit(self.allocator);
+        self.extends.deinit(self.allocator);
+        self.groups.deinit(self.allocator);
     }
 
     /// Returns whether the message has any field definitions

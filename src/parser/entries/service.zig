@@ -85,11 +85,11 @@ test "service parsing" {
 
     // Test case 3: Service with nested braces
     {
-        var buf = ParserBuffer{ .buf =
-        \\service Test {
-        \\    rpc Method1 (Request) { option deprecated = true; }
-        \\    rpc Method2 (Request) returns (Response) { option idempotency_level = "NO_SIDE_EFFECTS"; }
-        \\}
+        var buf = ParserBuffer{ .buf = 
+            \\service Test {
+            \\    rpc Method1 (Request) { option deprecated = true; }
+            \\    rpc Method2 (Request) returns (Response) { option idempotency_level = "NO_SIDE_EFFECTS"; }
+            \\}
         };
         const result = try Service.parse(&buf);
         try std.testing.expect(result != null);

@@ -122,20 +122,21 @@ fn findExtendMessage(file: *ProtoFile, name: ScopedName) ?*Message {
 /// Find a local message that is being extended within the same file
 fn findLocalExtendSource(file: *ProtoFile, messageName: ScopedName, extendBase: ScopedName) Error!?*Message {
     var searchPath: ?ScopedName = try messageName.clone();
+    defer if (searchPath) |*s| s.deinit();
 
-    while (searchPath) |s| {
-        const name = try extendBase.toScope(s);
+    while (searchPath) |*s| {
+        var name = try extendBase.toScope(s);
         defer name.deinit();
 
         for (file.messages.items) |*msg| {
             if (findExtendInMessage(msg, name)) |res| {
-                s.deinit();
                 return res;
             }
         }
 
-        searchPath = try s.getParent();
+        const nextPath = try s.getParent();
         s.deinit();
+        searchPath = nextPath;
     }
 
     return null;
@@ -182,7 +183,7 @@ fn copyExtendedFields(message: *Message, target: ExtendBase) Error!void {
         if (!field_exists) {
             var new_field = try source_field.clone();
             new_field.f_type.scope_ref = target.file;
-            try message.fields.append(new_field);
+            try message.fields.append(message.allocator, new_field);
         }
     }
 
@@ -195,7 +196,7 @@ fn copyExtendedFields(message: *Message, target: ExtendBase) Error!void {
         if (!map_exists) {
             var new_map = try source_map.clone();
             new_map.value_type.scope_ref = target.file;
-            try message.maps.append(new_map);
+            try message.maps.append(message.allocator, new_map);
         }
     }
 
@@ -211,7 +212,7 @@ fn copyExtendedFields(message: *Message, target: ExtendBase) Error!void {
                 var new_field = try field.clone();
                 new_field.f_type.scope_ref = target.file;
             }
-            try message.oneofs.append(new_oneof);
+            try message.oneofs.append(message.allocator, new_oneof);
         }
     }
 }
@@ -240,29 +241,25 @@ fn resolveLocalType(file: *ProtoFile, ftype: *FieldType) Error!bool {
     if (ftype.name) |name_to_search| {
         const scope = ftype.scope;
         var search_path: ?ScopedName = try scope.clone();
+        defer if (search_path) |*sp| sp.deinit();
 
-        while (search_path) |sp| {
-            const name = try name_to_search.toScope(sp);
+        while (search_path) |*sp| {
+            var name = try name_to_search.toScope(sp);
             defer name.deinit();
-
-            // Store next path before potentially returning
-            const next_path = try sp.getParent();
-            defer sp.deinit();
 
             const target_file: *ProtoFile = if (ftype.scope_ref) |f| f else file;
 
             if (findEnum(target_file, name)) |res| {
                 ftype.ref_local_enum = res;
-                // Clean up remaining search path before returning
-                if (next_path) |np| np.deinit();
                 return true;
             } else if (findMessage(target_file, name)) |res| {
                 ftype.ref_local_message = res;
-                // Clean up remaining search path before returning
-                if (next_path) |np| np.deinit();
                 return true;
             }
 
+            // Get next path and clean up current one
+            const next_path = try sp.getParent();
+            sp.deinit();
             search_path = next_path;
         }
 
@@ -281,29 +278,25 @@ fn resolveExternalType(file: *ProtoFile, ftype: *FieldType) Error!bool {
         for (target_file.imports.items) |*import| {
             if (import.target) |imported_file| {
                 var search_path: ?ScopedName = try scope.clone();
+                defer if (search_path) |*sp| sp.deinit();
 
-                while (search_path) |sp| {
-                    const local_name = try name_to_search.toScope(sp);
+                while (search_path) |*sp| {
+                    var local_name = try name_to_search.toScope(sp);
                     defer local_name.deinit();
-
-                    // Store next path before potentially returning
-                    const next_path = try sp.getParent();
-                    defer sp.deinit();
 
                     if (findEnum(imported_file, local_name)) |res| {
                         ftype.ref_external_enum = res;
                         ftype.ref_import = imported_file;
-                        // Clean up remaining search path before returning
-                        if (next_path) |np| np.deinit();
                         return true;
                     } else if (findMessage(imported_file, local_name)) |res| {
                         ftype.ref_external_message = res;
                         ftype.ref_import = imported_file;
-                        // Clean up remaining search path before returning
-                        if (next_path) |np| np.deinit();
                         return true;
                     }
 
+                    // Get next path and clean up current one
+                    const next_path = try sp.getParent();
+                    sp.deinit();
                     search_path = next_path;
                 }
             }

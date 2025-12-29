@@ -35,6 +35,8 @@ pub const Reserved = struct {
     /// List of reserved items (either field numbers or field names)
     items: std.ArrayList([]const u8),
 
+    allocator: std.mem.Allocator,
+
     /// Attempts to parse a reserved declaration from the given buffer.
     /// Returns null if the buffer doesn't start with a reserved declaration.
     ///
@@ -56,12 +58,14 @@ pub const Reserved = struct {
 
         var fields = try lex.parseRanges(allocator, buf);
         if (fields.items.len == 0) {
+            fields.deinit(allocator);
             fields = try parseFieldNames(allocator, buf);
         }
 
         try buf.semicolon();
 
         return Reserved{
+            .allocator = allocator,
             .start = start,
             .end = buf.offset,
             .items = fields,
@@ -70,7 +74,7 @@ pub const Reserved = struct {
 
     /// Frees the memory allocated for reserved items
     pub fn deinit(self: *Reserved) void {
-        self.items.deinit();
+        self.items.deinit(self.allocator);
     }
 };
 
@@ -80,14 +84,14 @@ pub const Reserved = struct {
 /// Returns an ArrayList of field names without quotes.
 /// Returns empty ArrayList if no valid field names are found.
 fn parseFieldNames(allocator: std.mem.Allocator, buf: *ParserBuffer) Error!std.ArrayList([]const u8) {
-    var res = std.ArrayList([]const u8).init(allocator);
-    errdefer res.deinit();
+    var res = try std.ArrayList([]const u8).initCapacity(allocator, 64);
+    errdefer res.deinit(allocator);
 
     while (true) {
         try buf.skipSpaces();
         const name = try parseFieldName(buf) orelse return res;
 
-        try res.append(name);
+        try res.append(allocator, name);
 
         const c = try buf.char();
         if (c == ',') {

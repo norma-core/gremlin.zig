@@ -52,11 +52,11 @@ fn strLitSingle(buf: *ParserBuffer, close: u8) Error!void {
 fn parseEscapeSequence(buf: *ParserBuffer) Error!void {
     const next = try buf.shouldShiftNext();
     switch (next) {
-    // hexEscape = '\' ( "x" | "X" ) hexDigit [ hexDigit ]
+        // hexEscape = '\' ( "x" | "X" ) hexDigit [ hexDigit ]
         'x', 'X' => {
-        while (std.ascii.isHex(try buf.shouldShiftNext())) {}
-        buf.offset -= 1;
-    },
+            while (std.ascii.isHex(try buf.shouldShiftNext())) {}
+            buf.offset -= 1;
+        },
         // octEscape = '\' octalDigit [ octalDigit [ octalDigit ] ]
         '0'...'7' => {
             while (isOctalDigit(try buf.shouldShiftNext())) {}
@@ -314,11 +314,7 @@ fn isOctalDigit(c: u8) bool {
     return c >= '0' and c <= '7';
 }
 
-const base_types = [_][]const u8{
-    "double", "float", "int32", "int64", "uint32", "uint64",
-    "sint32", "sint64", "fixed32", "fixed64", "sfixed32",
-    "sfixed64", "bool", "string", "bytes"
-};
+const base_types = [_][]const u8{ "double", "float", "int32", "int64", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32", "sfixed64", "bool", "string", "bytes" };
 
 /// Parse a field type (base type or message type)
 pub fn fieldType(buf: *ParserBuffer) Error![]const u8 {
@@ -353,13 +349,14 @@ fn messageType(buf: *ParserBuffer) Error![]const u8 {
 
 /// Parse ranges in the format "2", "15", "9 to 11"
 pub fn parseRanges(allocator: std.mem.Allocator, buf: *ParserBuffer) Error!std.ArrayList([]const u8) {
-    var res = std.ArrayList([]const u8).init(allocator);
+    var res = try std.ArrayList([]const u8).initCapacity(allocator, 32);
+    errdefer res.deinit(allocator);
 
     while (true) {
         try buf.skipSpaces();
         const range = try parseRange(buf) orelse return res;
 
-        try res.append(range);
+        try res.append(allocator, range);
 
         const c = try buf.char();
         if (c == ',') {
@@ -504,12 +501,12 @@ test "parse range" {
 
 test "parse ranges" {
     var buf = ParserBuffer.init("2, 15, 9 to 11");
-    const res = try parseRanges(std.testing.allocator, &buf);
+    var res = try parseRanges(std.testing.allocator, &buf);
     try std.testing.expectEqual(res.items.len, 3);
     try std.testing.expectEqualStrings("2", res.items[0]);
     try std.testing.expectEqualStrings("15", res.items[1]);
     try std.testing.expectEqualStrings("9 to 11", res.items[2]);
-    res.deinit();
+    res.deinit(std.testing.allocator);
 }
 
 test "parse x str" {

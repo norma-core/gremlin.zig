@@ -25,19 +25,19 @@ pub fn findProtoFiles(allocator: std.mem.Allocator, basePath: []const u8) !std.A
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
-    var paths = std.ArrayList([]const u8).init(allocator);
+    var paths = try std.ArrayList([]const u8).initCapacity(allocator, 128);
     errdefer {
         for (paths.items) |path| {
             allocator.free(path);
         }
-        paths.deinit();
+        paths.deinit(allocator);
     }
 
     // Walk through all files and directories recursively
     while (try walker.next()) |entry| {
         if (entry.kind == .file and std.mem.eql(u8, std.fs.path.extension(entry.basename), ".proto")) {
             const path = try dir.realpathAlloc(allocator, entry.path);
-            try paths.append(path);
+            try paths.append(allocator, path);
         }
     }
 
@@ -53,11 +53,11 @@ const FsNode = struct {
     files: usize, // Number of .proto files under this node
 
     /// Recursively frees all memory associated with this node and its children
-    fn deinit(self: FsNode) void {
-        for (self.children.items) |child| {
+    fn deinit(self: *FsNode) void {
+        for (self.children.items) |*child| {
             child.deinit();
         }
-        self.children.deinit();
+        self.children.deinit(self.allocator.?);
         if (self.allocator) |a| {
             a.free(self.path);
         }
@@ -68,7 +68,7 @@ const FsNode = struct {
         return FsNode{
             .allocator = allocator,
             .path = try allocator.dupe(u8, path),
-            .children = std.ArrayList(FsNode).init(allocator),
+            .children = try std.ArrayList(FsNode).initCapacity(allocator, 32),
             .files = 0,
         };
     }
@@ -87,7 +87,7 @@ const FsNode = struct {
 
         // Create new child if not found
         const new_node = try FsNode.init(self.allocator.?, full_path);
-        try self.children.append(new_node);
+        try self.children.append(self.allocator.?, new_node);
         return &self.children.items[self.children.items.len - 1];
     }
 };
@@ -149,7 +149,7 @@ test "walk" {
         for (entries.items) |entry| {
             std.testing.allocator.free(entry);
         }
-        entries.deinit();
+        entries.deinit(std.testing.allocator);
     }
 
     try std.testing.expect(entries.items.len > 0);
@@ -160,11 +160,11 @@ test "walk" {
 }
 
 test "find root" {
-    var paths = std.ArrayList([]const u8).init(std.testing.allocator);
-    defer paths.deinit();
+    var paths = try std.ArrayList([]const u8).initCapacity(std.testing.allocator, 2);
+    defer paths.deinit(std.testing.allocator);
 
-    try paths.append("/a/b/c/d");
-    try paths.append("/a/b/d/c");
+    try paths.append(std.testing.allocator, "/a/b/c/d");
+    try paths.append(std.testing.allocator, "/a/b/d/c");
 
     const root = try findRoot(std.testing.allocator, paths);
     defer std.testing.allocator.free(root);

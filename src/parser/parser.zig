@@ -99,12 +99,12 @@ fn printError(allocator: std.mem.Allocator, path: []const u8, err: Error, buf: *
 /// Caller owns the returned ParseResult and must call deinit() on it
 pub fn parse(allocator: std.mem.Allocator, base_path: []const u8) !ParseResult {
     // Find all .proto files and their common root
-    const proto_files = try paths.findProtoFiles(allocator, base_path);
+    var proto_files = try paths.findProtoFiles(allocator, base_path);
     defer {
         for (proto_files.items) |file| {
             allocator.free(file);
         }
-        proto_files.deinit();
+        proto_files.deinit(allocator);
     }
 
     const root = if (!std.fs.path.isAbsolute(base_path))
@@ -114,20 +114,20 @@ pub fn parse(allocator: std.mem.Allocator, base_path: []const u8) !ParseResult {
     defer allocator.free(root);
 
     // Parse each file
-    var parsed_files = std.ArrayList(ProtoFile).init(allocator);
+    var parsed_files = try std.ArrayList(ProtoFile).initCapacity(allocator, proto_files.items.len);
     errdefer {
         for (parsed_files.items) |*file| {
             file.deinit();
         }
-        parsed_files.deinit();
+        parsed_files.deinit(allocator);
     }
 
-    var parser_buffers = std.ArrayList(ParserBuffer).init(allocator);
+    var parser_buffers = try std.ArrayList(ParserBuffer).initCapacity(allocator, proto_files.items.len);
     errdefer {
         for (parser_buffers.items) |*buf| {
             buf.deinit();
         }
-        parser_buffers.deinit();
+        parser_buffers.deinit(allocator);
     }
 
     // Process each proto file
@@ -138,8 +138,8 @@ pub fn parse(allocator: std.mem.Allocator, base_path: []const u8) !ParseResult {
         var result = ProtoFile.parse(allocator, &buffer);
         if (result) |*proto_file| {
             proto_file.path = try allocator.dupe(u8, file_path);
-            try parsed_files.append(proto_file.*);
-            try parser_buffers.append(buffer);
+            try parsed_files.append(allocator, proto_file.*);
+            try parser_buffers.append(allocator, buffer);
         } else |err| {
             try printError(allocator, file_path, err, &buffer);
             buffer.deinit();

@@ -43,6 +43,8 @@ pub const OneOfField = struct {
     /// Optional field options
     options: ?std.ArrayList(Option),
 
+    allocator: std.mem.Allocator,
+
     /// Parses a single field within a oneof group
     /// Format: type name = number [options];
     pub fn parse(allocator: std.mem.Allocator, scope: ScopedName, buf: *ParserBuffer) Error!OneOfField {
@@ -57,6 +59,7 @@ pub const OneOfField = struct {
         try buf.semicolon();
 
         return OneOfField{
+            .allocator = allocator,
             .start = start,
             .end = buf.offset,
             .f_type = f_type,
@@ -70,10 +73,11 @@ pub const OneOfField = struct {
     pub fn clone(f: *const OneOfField) Error!OneOfField {
         var opts: ?std.ArrayList(Option) = null;
         if (f.options) |options| {
-            opts = try options.clone();
+            opts = try options.clone(f.allocator);
         }
 
         return OneOfField{
+            .allocator = f.allocator,
             .start = 0,
             .end = 0,
             .f_type = try f.f_type.clone(),
@@ -86,7 +90,7 @@ pub const OneOfField = struct {
     /// Frees resources owned by the field
     pub fn deinit(f: *OneOfField) void {
         if (f.options) |*options| {
-            options.deinit();
+            options.deinit(f.allocator);
         }
         f.f_type.deinit();
     }
@@ -103,6 +107,8 @@ pub const MessageOneOfField = struct {
     /// Options for the oneof group
     options: std.ArrayList(Option),
 
+    allocator: std.mem.Allocator,
+
     /// Parses a complete oneof declaration
     /// Format: oneof name { field1; field2; ... }
     pub fn parse(allocator: std.mem.Allocator, scope: ScopedName, buf: *ParserBuffer) Error!?MessageOneOfField {
@@ -116,18 +122,18 @@ pub const MessageOneOfField = struct {
         const name = try lex.ident(buf);
         try buf.openBracket();
 
-        var fields = std.ArrayList(OneOfField).init(allocator);
-        var options = std.ArrayList(Option).init(allocator);
+        var fields = try std.ArrayList(OneOfField).initCapacity(allocator, 32);
+        var options = try std.ArrayList(Option).initCapacity(allocator, 32);
         errdefer {
-            fields.deinit();
-            options.deinit();
+            fields.deinit(allocator);
+            options.deinit(allocator);
         }
 
         while (true) {
             if (try Option.parse(buf)) |option| {
-                try options.append(option);
+                try options.append(allocator, option);
             } else {
-                try fields.append(try OneOfField.parse(allocator, scope, buf));
+                try fields.append(allocator, try OneOfField.parse(allocator, scope, buf));
             }
             try buf.skipSpaces();
             const c = try buf.char();
@@ -143,22 +149,24 @@ pub const MessageOneOfField = struct {
             .name = name,
             .fields = fields,
             .options = options,
+            .allocator = allocator,
         };
     }
 
     /// Creates a deep copy of the oneof group
     pub fn clone(f: *const MessageOneOfField) Error!MessageOneOfField {
-        var fields = std.ArrayList(OneOfField).init(f.fields.allocator);
+        var fields = try std.ArrayList(OneOfField).initCapacity(f.allocator, 32);
         for (f.fields.items) |*field| {
-            try fields.append(try field.clone());
+            try fields.append(f.allocator, try field.clone());
         }
 
         return MessageOneOfField{
+            .allocator = f.allocator,
             .start = 0,
             .end = 0,
             .name = f.name,
             .fields = fields,
-            .options = try f.options.clone(),
+            .options = try f.options.clone(f.allocator),
         };
     }
 
@@ -167,8 +175,8 @@ pub const MessageOneOfField = struct {
         for (f.fields.items) |*field| {
             field.deinit();
         }
-        f.fields.deinit();
-        f.options.deinit();
+        f.fields.deinit(f.allocator);
+        f.options.deinit(f.allocator);
     }
 };
 
@@ -186,6 +194,8 @@ pub const MessageMapField = struct {
     index: i32,
     /// Optional field options
     options: ?std.ArrayList(Option),
+
+    allocator: std.mem.Allocator,
 
     /// Parses a map field declaration
     /// Format: map<key_type, value_type> name = number [options];
@@ -240,6 +250,7 @@ pub const MessageMapField = struct {
             .f_name = f_name,
             .index = try std.fmt.parseInt(i32, f_number, 0),
             .options = options,
+            .allocator = allocator,
         };
     }
 
@@ -247,10 +258,11 @@ pub const MessageMapField = struct {
     pub fn clone(f: *const MessageMapField) Error!MessageMapField {
         var opts: ?std.ArrayList(Option) = null;
         if (f.options) |options| {
-            opts = try options.clone();
+            opts = try options.clone(f.allocator);
         }
 
         return MessageMapField{
+            .allocator = f.allocator,
             .start = 0,
             .end = 0,
             .key_type = f.key_type,
@@ -263,8 +275,8 @@ pub const MessageMapField = struct {
 
     /// Frees resources owned by the map field
     pub fn deinit(f: *MessageMapField) void {
-        if (f.options) |options| {
-            options.deinit();
+        if (f.options) |*options| {
+            options.deinit(f.allocator);
         }
         f.value_type.deinit();
     }
@@ -288,6 +300,7 @@ pub const NormalField = struct {
     index: i32,
     /// Optional field options
     options: ?std.ArrayList(Option),
+    allocator: std.mem.Allocator,
 
     /// Parses a normal field declaration
     /// Format: [repeated|optional|required] type name = number [options];
@@ -320,43 +333,23 @@ pub const NormalField = struct {
         const f_opts = try Option.parseList(allocator, buf);
         try buf.semicolon();
 
-        return NormalField{
-            .start = start,
-            .end = buf.offset,
-            .repeated = repeated,
-            .optional = optional,
-            .required = required,
-            .f_type = f_type,
-            .f_name = f_name,
-            .index = try std.fmt.parseInt(i32, f_number, 0),
-            .options = f_opts
-        };
+        return NormalField{ .start = start, .end = buf.offset, .repeated = repeated, .optional = optional, .required = required, .f_type = f_type, .f_name = f_name, .index = try std.fmt.parseInt(i32, f_number, 0), .options = f_opts, .allocator = allocator };
     }
 
     /// Creates a deep copy of the field
     pub fn clone(f: *const NormalField) Error!NormalField {
         var opts: ?std.ArrayList(Option) = null;
         if (f.options) |options| {
-            opts = try options.clone();
+            opts = try options.clone(f.allocator);
         }
 
-        return NormalField{
-            .start = 0,
-            .end = 0,
-            .repeated = f.repeated,
-            .optional = f.optional,
-            .required = f.required,
-            .index = f.index,
-            .f_name = f.f_name,
-            .f_type = try f.f_type.clone(),
-            .options = opts
-        };
+        return NormalField{ .start = 0, .end = 0, .repeated = f.repeated, .optional = f.optional, .required = f.required, .index = f.index, .f_name = f.f_name, .f_type = try f.f_type.clone(), .options = opts, .allocator = f.allocator };
     }
 
     /// Frees resources owned by the field
     pub fn deinit(f: *NormalField) void {
-        if (f.options) |options| {
-            options.deinit();
+        if (f.options) |*options| {
+            options.deinit(f.allocator);
         }
         f.f_type.deinit();
     }

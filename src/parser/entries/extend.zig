@@ -47,6 +47,8 @@ pub const ExtendField = struct {
     /// Optional field options in brackets
     options: ?std.ArrayList(Option),
 
+    allocator: std.mem.Allocator,
+
     /// Parses a single extend field declaration.
     /// Format: [optional|repeated] type name = number [options];
     ///
@@ -88,13 +90,14 @@ pub const ExtendField = struct {
             .f_type = f_type,
             .f_value = value,
             .options = opts,
+            .allocator = allocator,
         };
     }
 
     /// Frees resources owned by the ExtendField
     pub fn deinit(self: *ExtendField) void {
-        if (self.options) |opts| {
-            opts.deinit();
+        if (self.options) |*opts| {
+            opts.deinit(self.allocator);
         }
     }
 };
@@ -133,8 +136,8 @@ pub const Extend = struct {
         try buf.openBracket();
 
         // Parse the field declarations
-        var fields = std.ArrayList(ExtendField).init(allocator);
-        errdefer fields.deinit();
+        var fields = try std.ArrayList(ExtendField).initCapacity(allocator, 32);
+        errdefer fields.deinit(allocator);
 
         // Handle empty extend block
         const c = try buf.char();
@@ -144,7 +147,7 @@ pub const Extend = struct {
             // Parse fields until closing brace
             while (true) {
                 if (try ExtendField.parse(allocator, buf)) |field| {
-                    try fields.append(field);
+                    try fields.append(allocator, field);
                 }
                 try buf.skipSpaces();
                 const ec = try buf.char();
@@ -171,7 +174,7 @@ pub const Extend = struct {
         for (self.fields.items) |*field| {
             field.deinit();
         }
-        self.fields.deinit();
+        self.fields.deinit(self.allocator);
         self.base.deinit();
     }
 };
