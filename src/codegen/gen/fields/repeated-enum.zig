@@ -24,34 +24,24 @@ const fields = @import("../../../parser/main.zig").fields;
 const FieldType = @import("../../../parser/main.zig").FieldType;
 const Option = @import("../../../parser/main.zig").Option;
 
-/// Represents a repeated enum field in Protocol Buffers.
-/// Handles both packed and unpacked encoding formats, with specialized
-/// reader implementation to support both formats transparently.
 pub const ZigRepeatableEnumField = struct {
-    // Memory management
     allocator: std.mem.Allocator,
 
-    // Owned struct
     writer_struct_name: []const u8,
     reader_struct_name: []const u8,
 
-    // Field properties
-    target_type: FieldType, // Type information from protobuf
-    resolved_enum: ?[]const u8 = null, // Full name of the enum type in Zig
+    target_type: FieldType,
+    resolved_enum: ?[]const u8 = null,
 
-    // Generated names for field access
-    writer_field_name: []const u8, // Name in writer struct
-    reader_field_name: []const u8, // Internal name in reader struct
-    reader_method_name: []const u8, // Public getter method name
+    writer_field_name: []const u8,
+    reader_offset_field_name: []const u8,
+    reader_last_offset_field_name: []const u8,
+    reader_packed_field_name: []const u8,
+    reader_next_method_name: []const u8,
 
-    // Reader implementation details
-    reader_offsets_name: []const u8, // Name for offset storage array
-    reader_wires_name: []const u8, // Name for wire type storage array
-
-    // Wire format metadata
-    wire_const_full_name: []const u8, // Full qualified wire constant name
-    wire_const_name: []const u8, // Short wire constant name
-    wire_index: i32, // Field number in protocol
+    wire_const_full_name: []const u8,
+    wire_const_name: []const u8,
+    wire_index: i32,
 
     /// Initialize a new ZigRepeatableEnumField with the given parameters
     pub fn init(
@@ -77,24 +67,18 @@ pub const ZigRepeatableEnumField = struct {
             wireConstName,
         });
 
-        // Generate reader method name
-        const reader_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ "get_", field_name });
-        defer allocator.free(reader_prefixed);
-        const readerMethodName = try naming.structMethodName(allocator, reader_prefixed, names);
-
-        // Generate internal reader names
-        const reader_field = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name });
-        const reader_offsets = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_offsets" });
-        const reader_wires = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_wires" });
+        const reader_next_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ field_name, "_next" });
+        defer allocator.free(reader_next_prefixed);
+        const readerNextMethodName = try naming.structMethodName(allocator, reader_next_prefixed, names);
 
         return ZigRepeatableEnumField{
             .allocator = allocator,
             .target_type = field_type,
             .writer_field_name = name,
-            .reader_field_name = reader_field,
-            .reader_method_name = readerMethodName,
-            .reader_offsets_name = reader_offsets,
-            .reader_wires_name = reader_wires,
+            .reader_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_offset" }),
+            .reader_last_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_last_offset" }),
+            .reader_packed_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_packed" }),
+            .reader_next_method_name = readerNextMethodName,
             .wire_const_full_name = wireName,
             .wire_const_name = wireConstName,
             .wire_index = field_index,
@@ -111,16 +95,15 @@ pub const ZigRepeatableEnumField = struct {
         self.resolved_enum = try self.allocator.dupe(u8, resolvedEnum);
     }
 
-    /// Clean up allocated memory
     pub fn deinit(self: *ZigRepeatableEnumField) void {
         if (self.resolved_enum) |e| {
             self.allocator.free(e);
         }
         self.allocator.free(self.writer_field_name);
-        self.allocator.free(self.reader_field_name);
-        self.allocator.free(self.reader_method_name);
-        self.allocator.free(self.reader_offsets_name);
-        self.allocator.free(self.reader_wires_name);
+        self.allocator.free(self.reader_offset_field_name);
+        self.allocator.free(self.reader_last_offset_field_name);
+        self.allocator.free(self.reader_packed_field_name);
+        self.allocator.free(self.reader_next_method_name);
         self.allocator.free(self.wire_const_full_name);
         self.allocator.free(self.wire_const_name);
     }
@@ -184,15 +167,15 @@ pub const ZigRepeatableEnumField = struct {
         });
     }
 
-    /// Generate reader struct field declaration.
-    /// Uses separate arrays for offsets and wire types to support both encoding formats.
     pub fn createReaderStructField(self: *const ZigRepeatableEnumField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\{s}: ?std.ArrayList(usize) = null,
-            \\{s}: ?std.ArrayList(gremlin.ProtoWireType) = null,
+            \\{s}: ?usize = null,
+            \\{s}: ?usize = null,
+            \\{s}: bool = false,
         , .{
-            self.reader_offsets_name,
-            self.reader_wires_name,
+            self.reader_offset_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_packed_field_name,
         });
     }
 
@@ -202,81 +185,76 @@ pub const ZigRepeatableEnumField = struct {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
             \\    if (res.{s} == null) {{
-            \\        res.{s} = std.ArrayList(usize).init(allocator);
-            \\        res.{s} = std.ArrayList(gremlin.ProtoWireType).init(allocator);
+            \\        res.{s} = offset;
             \\    }}
-            \\    try res.{s}.?.append(offset);
-            \\    try res.{s}.?.append(tag.wire);
             \\    if (tag.wire == gremlin.ProtoWireType.bytes) {{
+            \\        res.{s} = true;
             \\        const length_result = try buf.readVarInt(offset);
-            \\        offset += length_result.size + @as(usize, @intCast(length_result.value));
+            \\        res.{s} = offset + length_result.size + @as(usize, @intCast(length_result.value));
+            \\        offset = res.{s}.?;
             \\    }} else {{
             \\        const result = try buf.readInt32(offset);
             \\        offset += result.size;
+            \\        res.{s} = offset;
             \\    }}
             \\}},
         , .{
             self.wire_const_full_name,
-            self.reader_offsets_name,
-            self.reader_offsets_name,
-            self.reader_wires_name,
-            self.reader_offsets_name,
-            self.reader_wires_name,
+            self.reader_offset_field_name,
+            self.reader_offset_field_name,
+            self.reader_packed_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_last_offset_field_name,
         });
     }
 
-    /// Generate getter method that constructs enum array from stored offsets.
-    /// Handles both packed and unpacked formats transparently.
     pub fn createReaderMethod(self: *const ZigRepeatableEnumField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\pub fn {s}(self: *const {s}, allocator: std.mem.Allocator) gremlin.Error![]{s} {{
-            \\    if (self.{s}) |offsets| {{
-            \\        if (offsets.items.len == 0) return &[_]{s}{{}};
+            \\pub fn {s}(self: *{s}) gremlin.Error!?{s} {{
+            \\    if (self.{s} == null) return null;
             \\
-            \\        var result = std.ArrayList({s}).init(allocator);
-            \\        errdefer result.deinit();
+            \\    const current_offset = self.{s}.?;
+            \\    if (current_offset >= self.{s}.?) {{
+            \\        self.{s} = null;
+            \\        return null;
+            \\    }}
             \\
-            \\        for (offsets.items, self.{s}.?.items) |start_offset, wire_type| {{
-            \\            if (wire_type == .bytes) {{
-            \\                const length_result = try self.buf.readVarInt(start_offset);
-            \\                var offset = start_offset + length_result.size;
-            \\                const end_offset = offset + @as(usize, @intCast(length_result.value));
+            \\    if (self.{s}) {{
+            \\        const value_result = try self.buf.readInt32(current_offset);
+            \\        self.{s} = current_offset + value_result.size;
             \\
-            \\                while (offset < end_offset) {{
-            \\                    const value_result = try self.buf.readInt32(offset);
-            \\                    try result.append(@enumFromInt(value_result.value));
-            \\                    offset += value_result.size;
-            \\                }}
+            \\        if (self.{s}.? >= self.{s}.?) {{
+            \\            self.{s} = null;
+            \\        }}
+            \\
+            \\        return @enumFromInt(value_result.value);
+            \\    }} else {{
+            \\        const value_result = try self.buf.readInt32(current_offset);
+            \\        const next_offset = current_offset + value_result.size;
+            \\
+            \\        if (next_offset >= self.{s}.? or !self.buf.hasNext(next_offset, 0)) {{
+            \\            self.{s} = null;
+            \\        }} else {{
+            \\            const next_tag = try self.buf.readTagAt(next_offset);
+            \\            if (next_tag.number == {s}) {{
+            \\                self.{s} = next_offset + next_tag.size;
             \\            }} else {{
-            \\                const value_result = try self.buf.readInt32(start_offset);
-            \\                try result.append(@enumFromInt(value_result.value));
+            \\                self.{s} = null;
             \\            }}
             \\        }}
-            \\        return result.toOwnedSlice();
+            \\
+            \\        return @enumFromInt(value_result.value);
             \\    }}
-            \\    return &[_]{s}{{}};
-            \\}}
-        , .{ self.reader_method_name, self.reader_struct_name, self.resolved_enum.?, self.reader_offsets_name, self.resolved_enum.?, self.resolved_enum.?, self.reader_wires_name, self.resolved_enum.? });
-    }
-
-    /// Generate cleanup code for reader's temporary storage
-    pub fn createReaderDeinit(self: *const ZigRepeatableEnumField) ![]const u8 {
-        return std.fmt.allocPrint(self.allocator,
-            \\if (self.{s}) |arr| {{
-            \\    arr.deinit();
-            \\}}
-            \\if (self.{s}) |arr| {{
-            \\    arr.deinit();
             \\}}
         , .{
-            self.reader_offsets_name,
-            self.reader_wires_name,
+            self.reader_next_method_name,       self.reader_struct_name,            self.resolved_enum.?,
+            self.reader_offset_field_name,      self.reader_offset_field_name,      self.reader_last_offset_field_name,
+            self.reader_offset_field_name,      self.reader_packed_field_name,      self.reader_offset_field_name,
+            self.reader_offset_field_name,      self.reader_last_offset_field_name, self.reader_offset_field_name,
+            self.reader_last_offset_field_name, self.reader_offset_field_name,      self.wire_const_full_name,
+            self.reader_offset_field_name,      self.reader_offset_field_name,
         });
-    }
-
-    /// Indicates whether the reader needs an allocator (always true for repeated fields)
-    pub fn readerNeedsAllocator(_: *const ZigRepeatableEnumField) bool {
-        return true;
     }
 };
 
@@ -360,8 +338,9 @@ test "basic repeatable enum field" {
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
     try std.testing.expectEqualStrings(
-        \\_enum_field_offsets: ?std.ArrayList(usize) = null,
-        \\_enum_field_wires: ?std.ArrayList(gremlin.ProtoWireType) = null,
+        \\_enum_field_offset: ?usize = null,
+        \\_enum_field_last_offset: ?usize = null,
+        \\_enum_field_packed: bool = false,
     , reader_field_code);
 
     // Test reader case
@@ -369,18 +348,18 @@ test "basic repeatable enum field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.ENUM_FIELD_WIRE => {
-        \\    if (res._enum_field_offsets == null) {
-        \\        res._enum_field_offsets = std.ArrayList(usize).init(allocator);
-        \\        res._enum_field_wires = std.ArrayList(gremlin.ProtoWireType).init(allocator);
+        \\    if (res._enum_field_offset == null) {
+        \\        res._enum_field_offset = offset;
         \\    }
-        \\    try res._enum_field_offsets.?.append(offset);
-        \\    try res._enum_field_wires.?.append(tag.wire);
         \\    if (tag.wire == gremlin.ProtoWireType.bytes) {
+        \\        res._enum_field_packed = true;
         \\        const length_result = try buf.readVarInt(offset);
-        \\        offset += length_result.size + @as(usize, @intCast(length_result.value));
+        \\        res._enum_field_last_offset = offset + length_result.size + @as(usize, @intCast(length_result.value));
+        \\        offset = res._enum_field_last_offset.?;
         \\    } else {
         \\        const result = try buf.readInt32(offset);
         \\        offset += result.size;
+        \\        res._enum_field_last_offset = offset;
         \\    }
         \\},
     , reader_case_code);
@@ -389,44 +368,41 @@ test "basic repeatable enum field" {
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
     try std.testing.expectEqualStrings(
-        \\pub fn getEnumField(self: *const TestReader, allocator: std.mem.Allocator) gremlin.Error![]messages.TestEnum {
-        \\    if (self._enum_field_offsets) |offsets| {
-        \\        if (offsets.items.len == 0) return &[_]messages.TestEnum{};
+        \\pub fn enumFieldNext(self: *TestReader) gremlin.Error!?messages.TestEnum {
+        \\    if (self._enum_field_offset == null) return null;
         \\
-        \\        var result = std.ArrayList(messages.TestEnum).init(allocator);
-        \\        errdefer result.deinit();
+        \\    const current_offset = self._enum_field_offset.?;
+        \\    if (current_offset >= self._enum_field_last_offset.?) {
+        \\        self._enum_field_offset = null;
+        \\        return null;
+        \\    }
         \\
-        \\        for (offsets.items, self._enum_field_wires.?.items) |start_offset, wire_type| {
-        \\            if (wire_type == .bytes) {
-        \\                const length_result = try self.buf.readVarInt(start_offset);
-        \\                var offset = start_offset + length_result.size;
-        \\                const end_offset = offset + @as(usize, @intCast(length_result.value));
+        \\    if (self._enum_field_packed) {
+        \\        const value_result = try self.buf.readInt32(current_offset);
+        \\        self._enum_field_offset = current_offset + value_result.size;
         \\
-        \\                while (offset < end_offset) {
-        \\                    const value_result = try self.buf.readInt32(offset);
-        \\                    try result.append(@enumFromInt(value_result.value));
-        \\                    offset += value_result.size;
-        \\                }
+        \\        if (self._enum_field_offset.? >= self._enum_field_last_offset.?) {
+        \\            self._enum_field_offset = null;
+        \\        }
+        \\
+        \\        return @enumFromInt(value_result.value);
+        \\    } else {
+        \\        const value_result = try self.buf.readInt32(current_offset);
+        \\        const next_offset = current_offset + value_result.size;
+        \\
+        \\        if (next_offset >= self._enum_field_last_offset.? or !self.buf.hasNext(next_offset, 0)) {
+        \\            self._enum_field_offset = null;
+        \\        } else {
+        \\            const next_tag = try self.buf.readTagAt(next_offset);
+        \\            if (next_tag.number == TestWire.ENUM_FIELD_WIRE) {
+        \\                self._enum_field_offset = next_offset + next_tag.size;
         \\            } else {
-        \\                const value_result = try self.buf.readInt32(start_offset);
-        \\                try result.append(@enumFromInt(value_result.value));
+        \\                self._enum_field_offset = null;
         \\            }
         \\        }
-        \\        return result.toOwnedSlice();
+        \\
+        \\        return @enumFromInt(value_result.value);
         \\    }
-        \\    return &[_]messages.TestEnum{};
         \\}
     , reader_method_code);
-
-    // Test deinit
-    const deinit_code = try zig_field.createReaderDeinit();
-    defer std.testing.allocator.free(deinit_code);
-    try std.testing.expectEqualStrings(
-        \\if (self._enum_field_offsets) |arr| {
-        \\    arr.deinit();
-        \\}
-        \\if (self._enum_field_wires) |arr| {
-        \\    arr.deinit();
-        \\}
-    , deinit_code);
 }

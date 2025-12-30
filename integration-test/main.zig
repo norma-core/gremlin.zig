@@ -26,15 +26,12 @@ test "simple write" {
 
 test "simple read" {
     const expected = &[_]u8{ 8, 101, 16, 102, 146, 1, 2, 8, 118, 232, 3, 0, 240, 3, 0, 248, 3, 0, 128, 4, 0, 136, 4, 0, 144, 4, 0, 157, 4, 0, 0, 0, 0, 161, 4, 0, 0, 0, 0, 0, 0, 0, 0, 173, 4, 0, 0, 0, 0, 177, 4, 0, 0, 0, 0, 0, 0, 0, 0, 189, 4, 0, 0, 0, 0, 193, 4, 0, 0, 0, 0, 0, 0, 0, 0, 200, 4, 0, 210, 4, 0, 218, 4, 0, 136, 5, 0, 144, 5, 0, 152, 5, 0, 162, 5, 0, 170, 5, 0 };
-    const allocator = std.testing.allocator;
 
-    const msg = try unittest.TestAllTypesReader.init(allocator, expected);
-    defer msg.deinit();
+    const msg = try unittest.TestAllTypesReader.init(expected);
     try std.testing.expectEqual(101, msg.getOptionalInt32());
     try std.testing.expectEqual(102, msg.getOptionalInt64());
 
-    const nested = try msg.getOptionalNestedMessage(allocator);
-    defer nested.deinit();
+    const nested = try msg.getOptionalNestedMessage();
 
     try std.testing.expectEqual(118, nested.getBb());
 }
@@ -62,18 +59,17 @@ test "map kv: empty" {
     try std.testing.expectEqualSlices(u8, expected, buf);
 
     // Deencode the message
+    var reader = try map_test.TestMapReader.init(buf);
 
-    const reader = try map_test.TestMapReader.init(allocator, buf);
-    defer reader.deinit();
-
-    // Verify the map
-    var map = try reader.getInt32ToMessageField(allocator) orelse unreachable;
-    defer map.deinit();
-    if (map.get(0)) |*v| {
-        try std.testing.expectEqual(0, v.getValue());
-    } else {
-        std.debug.panic("Expected value at key 0\n", .{});
+    // Verify the map using iterator
+    var found = false;
+    while (try reader.nextInt32ToMessageField()) |entry| {
+        if (entry.key == 0) {
+            try std.testing.expectEqual(0, entry.value.getValue());
+            found = true;
+        }
     }
+    try std.testing.expect(found);
 }
 
 test "map kv: value" {
@@ -98,18 +94,17 @@ test "map kv: value" {
     defer allocator.free(buf);
 
     // Deencode the message
+    var reader = try map_test.TestMapReader.init(buf);
 
-    const reader = try map_test.TestMapReader.init(allocator, buf);
-    defer reader.deinit();
-
-    // Verify the map
-    var map = try reader.getInt32ToMessageField(allocator) orelse unreachable;
-    defer map.deinit();
-    if (map.get(2)) |*v| {
-        try std.testing.expectEqual(32, v.getValue());
-    } else {
-        std.debug.panic("Expected value at key 0\n", .{});
+    // Verify the map using iterator
+    var found = false;
+    while (try reader.nextInt32ToMessageField()) |entry| {
+        if (entry.key == 2) {
+            try std.testing.expectEqual(32, entry.value.getValue());
+            found = true;
+        }
     }
+    try std.testing.expect(found);
 }
 
 test "negative values" {
@@ -142,8 +137,7 @@ test "negative values" {
     try std.testing.expectEqualSlices(u8, expected, buf);
 
     // Test reader
-    const parsed = try unittest.TestAllTypesReader.init(allocator, buf);
-    defer parsed.deinit();
+    const parsed = try unittest.TestAllTypesReader.init(buf);
 
     // Verify optional fields
     try std.testing.expectEqual(@as(i32, -100), parsed.getOptionalInt32());
@@ -157,76 +151,121 @@ test "negative values" {
 
     // Verify repeated fields
     {
-        const values = try parsed.getRepeatedInt32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i32, -200), values[0]);
-        try std.testing.expectEqual(@as(i32, -300), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt32Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i32, -200), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i32, -300), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedInt64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i64, -201), values[0]);
-        try std.testing.expectEqual(@as(i64, -301), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt64Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i64, -201), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i64, -301), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedSint32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i32, -202), values[0]);
-        try std.testing.expectEqual(@as(i32, -302), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSint32Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i32, -202), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i32, -302), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedSint64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i64, -203), values[0]);
-        try std.testing.expectEqual(@as(i64, -303), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSint64Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i64, -203), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i64, -303), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedSfixed32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i32, -204), values[0]);
-        try std.testing.expectEqual(@as(i32, -304), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSfixed32Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i32, -204), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i32, -304), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedSfixed64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(i64, -205), values[0]);
-        try std.testing.expectEqual(@as(i64, -305), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSfixed64Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i64, -205), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i64, -305), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedFloat(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(f32, -205), values[0]);
-        try std.testing.expectEqual(@as(f32, -305), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedFloatNext()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(f32, -205), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(f32, -305), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const values = try parsed.getRepeatedDouble(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqual(@as(usize, 2), values.len);
-        try std.testing.expectEqual(@as(f64, -206), values[0]);
-        try std.testing.expectEqual(@as(f64, -306), values[1]);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedDoubleNext()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(f64, -206), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(f64, -306), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 }
 
 test "complex read" {
     const expected = &[_]u8{ 8, 101, 16, 102, 24, 103, 32, 104, 40, 210, 1, 48, 212, 1, 61, 107, 0, 0, 0, 65, 108, 0, 0, 0, 0, 0, 0, 0, 77, 109, 0, 0, 0, 81, 110, 0, 0, 0, 0, 0, 0, 0, 93, 0, 0, 222, 66, 97, 0, 0, 0, 0, 0, 0, 92, 64, 104, 1, 114, 3, 49, 49, 53, 122, 3, 49, 49, 54, 146, 1, 2, 8, 118, 154, 1, 2, 8, 119, 162, 1, 2, 8, 120, 168, 1, 3, 176, 1, 6, 184, 1, 9, 194, 1, 3, 49, 50, 52, 202, 1, 3, 49, 50, 53, 210, 1, 2, 8, 126, 218, 1, 2, 8, 127, 226, 1, 3, 8, 128, 1, 250, 1, 4, 201, 1, 173, 2, 130, 2, 4, 202, 1, 174, 2, 138, 2, 4, 203, 1, 175, 2, 146, 2, 4, 204, 1, 176, 2, 154, 2, 4, 154, 3, 226, 4, 162, 2, 4, 156, 3, 228, 4, 170, 2, 8, 207, 0, 0, 0, 51, 1, 0, 0, 178, 2, 16, 208, 0, 0, 0, 0, 0, 0, 0, 52, 1, 0, 0, 0, 0, 0, 0, 186, 2, 8, 209, 0, 0, 0, 53, 1, 0, 0, 194, 2, 16, 210, 0, 0, 0, 0, 0, 0, 0, 54, 1, 0, 0, 0, 0, 0, 0, 202, 2, 8, 0, 0, 83, 67, 0, 128, 155, 67, 210, 2, 16, 0, 0, 0, 0, 0, 128, 106, 64, 0, 0, 0, 0, 0, 128, 115, 64, 218, 2, 2, 1, 0, 226, 2, 3, 50, 49, 53, 226, 2, 3, 51, 49, 53, 234, 2, 3, 50, 49, 54, 234, 2, 3, 51, 49, 54, 130, 3, 3, 8, 218, 1, 130, 3, 3, 8, 190, 2, 138, 3, 3, 8, 219, 1, 138, 3, 3, 8, 191, 2, 146, 3, 3, 8, 220, 1, 146, 3, 3, 8, 192, 2, 154, 3, 2, 2, 3, 162, 3, 2, 5, 6, 170, 3, 2, 8, 9, 178, 3, 3, 50, 50, 52, 178, 3, 3, 51, 50, 52, 186, 3, 3, 50, 50, 53, 186, 3, 3, 51, 50, 53, 202, 3, 3, 8, 227, 1, 202, 3, 3, 8, 199, 2, 232, 3, 145, 3, 240, 3, 146, 3, 248, 3, 147, 3, 128, 4, 148, 3, 136, 4, 170, 6, 144, 4, 172, 6, 157, 4, 151, 1, 0, 0, 161, 4, 152, 1, 0, 0, 0, 0, 0, 0, 173, 4, 153, 1, 0, 0, 177, 4, 154, 1, 0, 0, 0, 0, 0, 0, 189, 4, 0, 128, 205, 67, 193, 4, 0, 0, 0, 0, 0, 192, 121, 64, 200, 4, 0, 210, 4, 3, 52, 49, 53, 218, 4, 3, 52, 49, 54, 136, 5, 1, 144, 5, 4, 152, 5, 7, 162, 5, 3, 52, 50, 52, 170, 5, 3, 52, 50, 53, 248, 6, 217, 4 };
-    const allocator = std.testing.allocator;
-
-    const msg = try unittest.TestAllTypesReader.init(allocator, expected);
-    defer msg.deinit();
+    const msg = try unittest.TestAllTypesReader.init(expected);
 
     // Test scalar fields
     try std.testing.expectEqual(@as(i32, 101), msg.getOptionalInt32());
@@ -246,27 +285,30 @@ test "complex read" {
     try std.testing.expectEqualStrings("116", msg.getOptionalBytes());
 
     // Test nested message
-    const nested = try msg.getOptionalNestedMessage(allocator);
-    defer nested.deinit();
+    const nested = try msg.getOptionalNestedMessage();
     try std.testing.expectEqual(@as(i32, 118), nested.getBb());
 
     // Test foreign message
-    const foreign = try msg.getOptionalForeignMessage(allocator);
-    defer foreign.deinit();
+    const foreign = try msg.getOptionalForeignMessage();
     try std.testing.expectEqual(@as(i32, 119), foreign.getC());
 
     // Test import message
-    const import_msg = try msg.getOptionalImportMessage(allocator);
-    defer import_msg.deinit();
+    const import_msg = try msg.getOptionalImportMessage();
     try std.testing.expectEqual(@as(i32, 120), import_msg.getD());
 
     // Test repeated fields
     {
-        const repeated_int32 = try msg.getRepeatedInt32(allocator);
-        defer allocator.free(repeated_int32);
-        try std.testing.expectEqual(@as(usize, 2), repeated_int32.len);
-        try std.testing.expectEqual(@as(i32, 201), repeated_int32[0]);
-        try std.testing.expectEqual(@as(i32, 301), repeated_int32[1]);
+        var count: usize = 0;
+        var msg_copy = msg;
+        while (try msg_copy.repeatedInt32Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i32, 201), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i32, 301), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     // Test enums
@@ -445,84 +487,127 @@ test "map parsing" {
     const allocator = std.testing.allocator;
 
     const content = @embedFile("binaries/map_test");
-    const data = try map_test.TestMapReader.init(allocator, content);
-    defer data.deinit();
+    var data = try map_test.TestMapReader.init(content);
 
     // Test int32 to int32 map
     {
-        var map = try data.getInt32ToInt32Field(allocator) orelse unreachable;
+        var map = std.AutoHashMap(i32, i32).init(allocator);
         defer map.deinit();
+        while (try data.nextInt32ToInt32Field()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqual(@as(i32, 101), map.get(100) orelse unreachable);
         try std.testing.expectEqual(@as(i32, 201), map.get(200) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test int32 to string map
     {
-        var map = try data.getInt32ToStringField(allocator) orelse unreachable;
+        var map = std.AutoHashMap(i32, []const u8).init(allocator);
         defer map.deinit();
+        while (try data.nextInt32ToStringField()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqualStrings("101", map.get(101) orelse unreachable);
         try std.testing.expectEqualStrings("201", map.get(201) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test int32 to bytes map
     {
-        var map = try data.getInt32ToBytesField(allocator) orelse unreachable;
+        var map = std.AutoHashMap(i32, []const u8).init(allocator);
         defer map.deinit();
+        while (try data.nextInt32ToBytesField()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqualSlices(u8, &[_]u8{102}, map.get(102) orelse unreachable);
         try std.testing.expectEqualSlices(u8, &[_]u8{202}, map.get(202) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test int32 to enum map
     {
-        var map = try data.getInt32ToEnumField(allocator) orelse unreachable;
+        var map = std.AutoHashMap(i32, map_test.TestMap.EnumValue).init(allocator);
         defer map.deinit();
+        while (try data.nextInt32ToEnumField()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqual(map_test.TestMap.EnumValue.FOO, map.get(103) orelse unreachable);
         try std.testing.expectEqual(map_test.TestMap.EnumValue.BAR, map.get(203) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test string to int32 map
     {
-        var map = try data.getStringToInt32Field(allocator) orelse unreachable;
+        var map = std.StringHashMap(i32).init(allocator);
         defer map.deinit();
+        while (try data.nextStringToInt32Field()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqual(@as(i32, 105), map.get("105") orelse unreachable);
         try std.testing.expectEqual(@as(i32, 205), map.get("205") orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test uint32 to int32 map
     {
-        var map = try data.getUint32ToInt32Field(allocator) orelse unreachable;
+        var map = std.AutoHashMap(u32, i32).init(allocator);
         defer map.deinit();
+        while (try data.nextUint32ToInt32Field()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqual(@as(i32, 106), map.get(106) orelse unreachable);
         try std.testing.expectEqual(@as(i32, 206), map.get(206) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test int64 to int32 map
     {
-        var map = try data.getInt64ToInt32Field(allocator) orelse unreachable;
+        var map = std.AutoHashMap(i64, i32).init(allocator);
         defer map.deinit();
+        while (try data.nextInt64ToInt32Field()) |entry| {
+            try map.put(entry.key, entry.value);
+        }
         try std.testing.expectEqual(@as(i32, 107), map.get(107) orelse unreachable);
         try std.testing.expectEqual(@as(i32, 207), map.get(207) orelse unreachable);
     }
 
+    // Reset reader for next map
+    data = try map_test.TestMapReader.init(content);
+
     // Test int32 to message map
     {
-        var map = try data.getInt32ToMessageField(allocator) orelse unreachable;
-        defer map.deinit();
-
-        const msg1 = map.get(104) orelse unreachable;
-        try std.testing.expectEqual(@as(i32, 104), msg1.getValue());
-
-        const msg2 = map.get(204) orelse unreachable;
-        try std.testing.expectEqual(@as(i32, 204), msg2.getValue());
+        var found_104 = false;
+        var found_204 = false;
+        while (try data.nextInt32ToMessageField()) |entry| {
+            if (entry.key == 104) {
+                try std.testing.expectEqual(@as(i32, 104), entry.value.getValue());
+                found_104 = true;
+            } else if (entry.key == 204) {
+                try std.testing.expectEqual(@as(i32, 204), entry.value.getValue());
+                found_204 = true;
+            }
+        }
+        try std.testing.expect(found_104);
+        try std.testing.expect(found_204);
     }
 }
 
 test "golden message" {
-    const allocator = std.testing.allocator;
-
     const content = @embedFile("binaries/golden_message");
-    const parsed = try unittest.TestAllTypesReader.init(allocator, content);
-    defer parsed.deinit();
+    const parsed = try unittest.TestAllTypesReader.init(content);
 
     // Check scalar fields
     try std.testing.expectEqual(@as(i32, 101), parsed.getOptionalInt32());
@@ -543,38 +628,32 @@ test "golden message" {
 
     // Test nested messages
     {
-        const nested = try parsed.getOptionalNestedMessage(allocator);
-        defer nested.deinit();
+        const nested = try parsed.getOptionalNestedMessage();
         try std.testing.expectEqual(@as(i32, 118), nested.getBb());
     }
 
     {
-        const foreign = try parsed.getOptionalForeignMessage(allocator);
-        defer foreign.deinit();
+        const foreign = try parsed.getOptionalForeignMessage();
         try std.testing.expectEqual(@as(i32, 119), foreign.getC());
     }
 
     {
-        const import_msg = try parsed.getOptionalImportMessage(allocator);
-        defer import_msg.deinit();
+        const import_msg = try parsed.getOptionalImportMessage();
         try std.testing.expectEqual(@as(i32, 120), import_msg.getD());
     }
 
     {
-        const public_import = try parsed.getOptionalPublicImportMessage(allocator);
-        defer public_import.deinit();
+        const public_import = try parsed.getOptionalPublicImportMessage();
         try std.testing.expectEqual(@as(i32, 126), public_import.getE());
     }
 
     {
-        const lazy = try parsed.getOptionalLazyMessage(allocator);
-        defer lazy.deinit();
+        const lazy = try parsed.getOptionalLazyMessage();
         try std.testing.expectEqual(@as(i32, 127), lazy.getBb());
     }
 
     {
-        const unverified = try parsed.getOptionalUnverifiedLazyMessage(allocator);
-        defer unverified.deinit();
+        const unverified = try parsed.getOptionalUnverifiedLazyMessage();
         try std.testing.expectEqual(@as(i32, 128), unverified.getBb());
     }
 
@@ -589,23 +668,38 @@ test "golden message" {
 
     // Test repeated fields
     {
-        const repeated = try parsed.getRepeatedInt32(allocator);
-        defer allocator.free(repeated);
-        try std.testing.expectEqualSlices(i32, &[_]i32{ 201, 301 }, repeated);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt32Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i32, 201), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i32, 301), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     {
-        const repeated = try parsed.getRepeatedInt64(allocator);
-        defer allocator.free(repeated);
-        try std.testing.expectEqualSlices(i64, &[_]i64{ 202, 302 }, repeated);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt64Next()) |value| {
+            if (count == 0) {
+                try std.testing.expectEqual(@as(i64, 202), value);
+            } else if (count == 1) {
+                try std.testing.expectEqual(@as(i64, 302), value);
+            }
+            count += 1;
+        }
+        try std.testing.expectEqual(@as(usize, 2), count);
     }
 
     // Test oneof fields
     try std.testing.expectEqual(@as(u32, 601), parsed.getOneofUint32());
 
     {
-        const msg = try parsed.getOneofNestedMessage(allocator);
-        defer msg.deinit();
+        const msg = try parsed.getOneofNestedMessage();
         try std.testing.expectEqual(@as(i32, 602), msg.getBb());
     }
 
@@ -669,129 +763,194 @@ test "repeated types - marshal and parse" {
     defer allocator.free(buf);
 
     // Parse the encoded message
-    const parsed = try unittest.TestAllTypesReader.init(allocator, buf);
-    defer parsed.deinit();
+    const parsed = try unittest.TestAllTypesReader.init(buf);
 
     // Test basic numeric types
     {
-        const values = try parsed.getRepeatedInt32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i32, msg.repeated_int32.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt32Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_int32.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_int32.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedInt64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i64, msg.repeated_int64.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedInt64Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_int64.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_int64.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedUint32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(u32, msg.repeated_uint32.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedUint32Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_uint32.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_uint32.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedUint64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(u64, msg.repeated_uint64.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedUint64Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_uint64.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_uint64.?.len, count);
     }
 
     // Test signed variants
     {
-        const values = try parsed.getRepeatedSint32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i32, msg.repeated_sint32.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSint32Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_sint32.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_sint32.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedSint64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i64, msg.repeated_sint64.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSint64Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_sint64.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_sint64.?.len, count);
     }
 
     // Test fixed width types
     {
-        const values = try parsed.getRepeatedFixed32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(u32, msg.repeated_fixed32.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedFixed32Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_fixed32.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_fixed32.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedFixed64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(u64, msg.repeated_fixed64.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedFixed64Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_fixed64.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_fixed64.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedSfixed32(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i32, msg.repeated_sfixed32.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSfixed32Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_sfixed32.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_sfixed32.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedSfixed64(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(i64, msg.repeated_sfixed64.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedSfixed64Next()) |value| {
+            try std.testing.expectEqual(msg.repeated_sfixed64.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_sfixed64.?.len, count);
     }
 
     // Test floating point types
     {
-        const values = try parsed.getRepeatedFloat(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(f32, msg.repeated_float.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedFloatNext()) |value| {
+            try std.testing.expectEqual(msg.repeated_float.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_float.?.len, count);
     }
     {
-        const values = try parsed.getRepeatedDouble(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(f64, msg.repeated_double.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedDoubleNext()) |value| {
+            try std.testing.expectEqual(msg.repeated_double.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_double.?.len, count);
     }
 
     // Test bool type
     {
-        const values = try parsed.getRepeatedBool(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(bool, msg.repeated_bool.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedBoolNext()) |value| {
+            try std.testing.expectEqual(msg.repeated_bool.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_bool.?.len, count);
     }
 
     // Test string and bytes
     {
-        const values = parsed.getRepeatedString();
-        for (values, msg.repeated_string.?) |parsed_str, orig_str| {
-            try std.testing.expectEqualStrings(orig_str.?, parsed_str);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (parsed_copy.repeatedStringNext()) |value| {
+            try std.testing.expectEqualStrings(msg.repeated_string.?[count].?, value);
+            count += 1;
         }
+        try std.testing.expectEqual(msg.repeated_string.?.len, count);
     }
     {
-        const values = parsed.getRepeatedBytes();
-        for (values, msg.repeated_bytes.?) |parsed_bytes, orig_bytes| {
-            try std.testing.expectEqualStrings(orig_bytes.?, parsed_bytes);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (parsed_copy.repeatedBytesNext()) |value| {
+            try std.testing.expectEqualStrings(msg.repeated_bytes.?[count].?, value);
+            count += 1;
         }
+        try std.testing.expectEqual(msg.repeated_bytes.?.len, count);
     }
 
     // Test nested messages
     {
-        const values = try parsed.getRepeatedNestedMessage(allocator);
-        defer {
-            // Clean up the array list
-            allocator.free(values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (parsed_copy.repeatedNestedMessageNext()) |value| {
+            try std.testing.expectEqual(msg.repeated_nested_message.?[count].?.bb, value.getBb());
+            count += 1;
         }
-        try std.testing.expectEqual(msg.repeated_nested_message.?.len, values.len);
-        for (values, msg.repeated_nested_message.?) |parsed_msg, orig_msg| {
-            try std.testing.expectEqual(orig_msg.?.bb, parsed_msg.getBb());
-        }
+        try std.testing.expectEqual(msg.repeated_nested_message.?.len, count);
     }
 
     // Test enum types
     {
-        const values = try parsed.getRepeatedNestedEnum(allocator);
-        defer allocator.free(values);
-        try std.testing.expectEqualSlices(unittest.TestAllTypes.NestedEnum, msg.repeated_nested_enum.?, values);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (try parsed_copy.repeatedNestedEnumNext()) |value| {
+            try std.testing.expectEqual(msg.repeated_nested_enum.?[count], value);
+            count += 1;
+        }
+        try std.testing.expectEqual(msg.repeated_nested_enum.?.len, count);
     }
 
     // Test special string types
     {
-        const values = parsed.getRepeatedStringPiece();
-        for (values, msg.repeated_string_piece.?) |parsed_str, orig_str| {
-            try std.testing.expectEqualStrings(orig_str.?, parsed_str);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (parsed_copy.repeatedStringPieceNext()) |value| {
+            try std.testing.expectEqualStrings(msg.repeated_string_piece.?[count].?, value);
+            count += 1;
         }
+        try std.testing.expectEqual(msg.repeated_string_piece.?.len, count);
     }
     {
-        const values = parsed.getRepeatedCord();
-        for (values, msg.repeated_cord.?) |parsed_str, orig_str| {
-            try std.testing.expectEqualStrings(orig_str.?, parsed_str);
+        var count: usize = 0;
+        var parsed_copy = parsed;
+        while (parsed_copy.repeatedCordNext()) |value| {
+            try std.testing.expectEqualStrings(msg.repeated_cord.?[count].?, value);
+            count += 1;
         }
+        try std.testing.expectEqual(msg.repeated_cord.?.len, count);
     }
 }

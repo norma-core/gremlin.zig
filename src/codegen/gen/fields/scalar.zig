@@ -320,11 +320,6 @@ pub const ZigScalarField = struct {
             },
         );
     }
-
-    /// Indicates whether the reader needs an allocator (false for scalar fields)
-    pub fn readerNeedsAllocator(_: *const ZigScalarField) bool {
-        return false;
-    }
 };
 
 test "basic field" {

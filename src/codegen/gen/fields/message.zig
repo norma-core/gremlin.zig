@@ -175,11 +175,11 @@ pub const ZigMessageField = struct {
     /// This implements lazy deserialization - messages are only parsed when accessed.
     pub fn createReaderMethod(self: *const ZigMessageField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\pub fn {s}(self: *const {s}, allocator: std.mem.Allocator) gremlin.Error!{s} {{
+            \\pub fn {s}(self: *const {s}) gremlin.Error!{s} {{
             \\    if (self.{s}) |buf| {{
-            \\        return try {s}.init(allocator, buf);
+            \\        return try {s}.init(buf);
             \\    }}
-            \\    return try {s}.init(allocator, &[_]u8{{}});
+            \\    return try {s}.init(&[_]u8{{}});
             \\}}
         , .{
             self.reader_method_name,
@@ -189,12 +189,6 @@ pub const ZigMessageField = struct {
             self.resolved_reader_type.?,
             self.resolved_reader_type.?,
         });
-    }
-
-    /// Indicates whether the reader needs an allocator.
-    /// Returns false because raw bytes are stored directly.
-    pub fn readerNeedsAllocator(_: *const ZigMessageField) bool {
-        return false;
     }
 };
 
@@ -274,11 +268,11 @@ test "basic message field" {
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
     try std.testing.expectEqualStrings(
-        \\pub fn getMessageField(self: *const TestReader, allocator: std.mem.Allocator) gremlin.Error!messages.SubMessageReader {
+        \\pub fn getMessageField(self: *const TestReader) gremlin.Error!messages.SubMessageReader {
         \\    if (self._message_field_buf) |buf| {
-        \\        return try messages.SubMessageReader.init(allocator, buf);
+        \\        return try messages.SubMessageReader.init(buf);
         \\    }
-        \\    return try messages.SubMessageReader.init(allocator, &[_]u8{});
+        \\    return try messages.SubMessageReader.init(&[_]u8{});
         \\}
     , reader_method_code);
 }

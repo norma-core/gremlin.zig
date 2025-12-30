@@ -20,47 +20,41 @@
 
 const std = @import("std");
 const naming = @import("naming.zig");
-const Option =  @import("../../../parser/main.zig").Option;
-const FieldType =  @import("../../../parser/main.zig").FieldType;
-const MessageMapField =  @import("../../../parser/main.zig").fields.MessageMapField;
+const Option = @import("../../../parser/main.zig").Option;
+const FieldType = @import("../../../parser/main.zig").FieldType;
+const MessageMapField = @import("../../../parser/main.zig").fields.MessageMapField;
 
-// Import scalar type utilities
 const scalarSize = @import("scalar.zig").scalarSize;
 const scalarZigType = @import("scalar.zig").scalarZigType;
 const scalarWriter = @import("scalar.zig").scalarWriter;
 const scalarReader = @import("scalar.zig").scalarReader;
 const scalarDefaultValue = @import("scalar.zig").scalarDefaultValue;
 
-/// Represents a Protocol Buffer map field in Zig.
-/// Maps are encoded as repeated messages where each message contains a key and value field.
 pub const ZigMapField = struct {
-    // Memory management
     allocator: std.mem.Allocator,
 
-    // Owned struct
     writer_struct_name: []const u8,
     reader_struct_name: []const u8,
 
-    // Map field properties
-    key_type: []const u8, // Type of the map key (must be scalar type or string)
-    value_type: FieldType, // Type of the map value (can be any protobuf type)
-    field_index: i32, // Field number in protocol
+    key_type: []const u8,
+    value_type: FieldType,
+    field_index: i32,
 
-    // Generated names for field access
-    writer_field_name: []const u8, // Name in writer struct
-    reader_field_name: []const u8, // Internal name in reader struct
-    reader_method_name: []const u8, // Public getter method name
+    writer_field_name: []const u8,
+    reader_offset_field_name: []const u8,
+    reader_last_offset_field_name: []const u8,
+    reader_cnt_field_name: []const u8,
+    reader_next_method_name: []const u8,
+    reader_cnt_method_name: []const u8,
+    reader_entry_type_name: []const u8,
 
-    // Wire format metadata
-    wire_const_full_name: []const u8, // Full qualified wire constant name
-    wire_const_name: []const u8, // Short wire constant name
+    wire_const_full_name: []const u8,
+    wire_const_name: []const u8,
 
-    // Resolved type information
-    resolved_enum_type: ?[]const u8 = null, // For enum value types
-    resolved_writer_message_type: ?[]const u8 = null, // For message value types (writer)
-    resolved_reader_message_type: ?[]const u8 = null, // For message value types (reader)
+    resolved_enum_type: ?[]const u8 = null,
+    resolved_writer_message_type: ?[]const u8 = null,
+    resolved_reader_message_type: ?[]const u8 = null,
 
-    /// Initialize a new ZigMapField with the given parameters
     pub fn init(
         allocator: std.mem.Allocator,
         field: *const MessageMapField,
@@ -69,10 +63,8 @@ pub const ZigMapField = struct {
         writer_struct_name: []const u8,
         reader_struct_name: []const u8,
     ) !ZigMapField {
-        // Generate field names
         const name = try naming.structFieldName(allocator, field.f_name, names);
 
-        // Generate wire format constant names
         const wirePostfixed = try std.mem.concat(allocator, u8, &[_][]const u8{ field.f_name, "Wire" });
         defer allocator.free(wirePostfixed);
         const wireConstName = try naming.constName(allocator, wirePostfixed, names);
@@ -82,10 +74,17 @@ pub const ZigMapField = struct {
             wireConstName,
         });
 
-        // Generate reader method name
-        const reader_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ "get_", field.f_name });
-        defer allocator.free(reader_prefixed);
-        const readerMethodName = try naming.structMethodName(allocator, reader_prefixed, names);
+        const reader_next_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ "next_", field.f_name });
+        defer allocator.free(reader_next_prefixed);
+        const readerNextMethodName = try naming.structMethodName(allocator, reader_next_prefixed, names);
+
+        const reader_cnt_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ "count_", field.f_name });
+        defer allocator.free(reader_cnt_prefixed);
+        const readerCntMethodName = try naming.structMethodName(allocator, reader_cnt_prefixed, names);
+
+        const entry_type_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ field.f_name, "_entry" });
+        defer allocator.free(entry_type_prefixed);
+        const entryTypeName = try naming.structName(allocator, entry_type_prefixed, names);
 
         return ZigMapField{
             .allocator = allocator,
@@ -93,8 +92,12 @@ pub const ZigMapField = struct {
             .value_type = field.value_type,
             .field_index = field.index,
             .writer_field_name = name,
-            .reader_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name }),
-            .reader_method_name = readerMethodName,
+            .reader_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_offset" }),
+            .reader_last_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_last_offset" }),
+            .reader_cnt_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_cnt" }),
+            .reader_next_method_name = readerNextMethodName,
+            .reader_cnt_method_name = readerCntMethodName,
+            .reader_entry_type_name = entryTypeName,
             .wire_const_full_name = wireName,
             .wire_const_name = wireConstName,
             .writer_struct_name = writer_struct_name,
@@ -102,11 +105,14 @@ pub const ZigMapField = struct {
         };
     }
 
-    /// Clean up allocated memory
     pub fn deinit(self: *ZigMapField) void {
         self.allocator.free(self.writer_field_name);
-        self.allocator.free(self.reader_field_name);
-        self.allocator.free(self.reader_method_name);
+        self.allocator.free(self.reader_offset_field_name);
+        self.allocator.free(self.reader_last_offset_field_name);
+        self.allocator.free(self.reader_cnt_field_name);
+        self.allocator.free(self.reader_next_method_name);
+        self.allocator.free(self.reader_cnt_method_name);
+        self.allocator.free(self.reader_entry_type_name);
         self.allocator.free(self.wire_const_full_name);
         self.allocator.free(self.wire_const_name);
 
@@ -166,15 +172,15 @@ pub const ZigMapField = struct {
     fn keyRead(self: *const ZigMapField) ![]const u8 {
         if (std.mem.eql(u8, self.key_type, "string") or std.mem.eql(u8, self.key_type, "bytes")) {
             return self.allocator.dupe(u8,
-                \\const sized_key = try entry_buf.readBytes(offset);
+                \\const sized_key = try entry_buf.readBytes(entry_offset);
                 \\                      key = sized_key.value;
-                \\                      offset += sized_key.size;
+                \\                      entry_offset += sized_key.size;
             );
         } else {
             return std.fmt.allocPrint(self.allocator,
-                \\const sized_key = try entry_buf.{s}(offset);
+                \\const sized_key = try entry_buf.{s}(entry_offset);
                 \\                      key = sized_key.value;
-                \\                      offset += sized_key.size;
+                \\                      entry_offset += sized_key.size;
             , .{scalarReader(self.key_type)});
         }
     }
@@ -215,27 +221,27 @@ pub const ZigMapField = struct {
     fn valueRead(self: *const ZigMapField) ![]const u8 {
         if (self.value_type.is_bytes) {
             return self.allocator.dupe(u8,
-                \\const sized_value = try entry_buf.readBytes(offset);
+                \\const sized_value = try entry_buf.readBytes(entry_offset);
                 \\                      value = sized_value.value;
-                \\                      offset += sized_value.size;
+                \\                      entry_offset += sized_value.size;
             );
         } else if (self.value_type.is_scalar) {
             return std.fmt.allocPrint(self.allocator,
-                \\const sized_value = try entry_buf.{s}(offset);
+                \\const sized_value = try entry_buf.{s}(entry_offset);
                 \\                      value = sized_value.value;
-                \\                      offset += sized_value.size;
+                \\                      entry_offset += sized_value.size;
             , .{scalarReader(self.value_type.src)});
         } else if (self.value_type.isEnum()) {
             return self.allocator.dupe(u8,
-                \\const sized_value = try entry_buf.readInt32(offset);
+                \\const sized_value = try entry_buf.readInt32(entry_offset);
                 \\                      value = @enumFromInt(sized_value.value);
-                \\                      offset += sized_value.size;
+                \\                      entry_offset += sized_value.size;
             );
         } else {
             return std.fmt.allocPrint(self.allocator,
-                \\const sized_value = try entry_buf.readBytes(offset);
-                \\                      value = try {s}.init(allocator, sized_value.value);
-                \\                      offset += sized_value.size;
+                \\const sized_value = try entry_buf.readBytes(entry_offset);
+                \\                      value = try {s}.init(sized_value.value);
+                \\                      entry_offset += sized_value.size;
             , .{self.resolved_reader_message_type.?});
         }
     }
@@ -315,6 +321,20 @@ pub const ZigMapField = struct {
 
     // Code generation methods for field definitions and operations
 
+    /// Generate map entry type definition for top-level declarations
+    pub fn generateDeclarations(self: *const ZigMapField) ![]const u8 {
+        const key_type = try self.keyType();
+        const value_type = try self.valueReaderType();
+        defer self.allocator.free(value_type);
+
+        return std.fmt.allocPrint(self.allocator,
+            \\pub const {s} = struct {{
+            \\    key: {s},
+            \\    value: {s},
+            \\}};
+        , .{ self.reader_entry_type_name, key_type, value_type });
+    }
+
     /// Generate wire format constant declaration
     pub fn createWireConst(self: *const ZigMapField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator, "const {s}: gremlin.ProtoWireNumber = {d};", .{ self.wire_const_name, self.field_index });
@@ -384,31 +404,39 @@ pub const ZigMapField = struct {
         , .{ self.writer_field_name, key_size, value_size, self.wire_const_full_name, key_writer, value_writer });
     }
 
-    /// Generate reader struct field declaration.
-    /// The reader temporarily stores serialized key-value pairs as byte arrays.
     pub fn createReaderStructField(self: *const ZigMapField) ![]const u8 {
-        return std.fmt.allocPrint(self.allocator, "{s}: ?std.ArrayList([]const u8) = null,", .{self.reader_field_name});
+        return std.fmt.allocPrint(self.allocator,
+            \\{s}: ?usize = null,
+            \\{s}: ?usize = null,
+            \\{s}: usize = 0,
+        , .{ self.reader_offset_field_name, self.reader_last_offset_field_name, self.reader_cnt_field_name });
     }
 
-    /// Generate deserialization case statement.
-    /// Collects serialized key-value pair messages for later processing.
     pub fn createReaderCase(self: *const ZigMapField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
             \\    const result = try buf.readBytes(offset);
             \\    offset += result.size;
             \\    if (res.{s} == null) {{
-            \\        res.{s} = std.ArrayList([]const u8).init(allocator);
+            \\        res.{s} = offset - result.size;
             \\    }}
-            \\    try res.{s}.?.append(result.value);
+            \\    res.{s} = offset;
+            \\    res.{s} += 1;
             \\}},
-        , .{ self.wire_const_full_name, self.reader_field_name, self.reader_field_name, self.reader_field_name });
+        , .{ self.wire_const_full_name, self.reader_offset_field_name, self.reader_offset_field_name, self.reader_last_offset_field_name, self.reader_cnt_field_name });
     }
 
-    /// Generate getter method that constructs a map from collected key-value pairs.
-    /// This method deserializes each pair and builds either a StringHashMap or AutoHashMap.
-    pub fn createReaderMethod(self: *const ZigMapField) ![]const u8 {
-        const is_str_key = std.mem.eql(u8, self.key_type, "string") or std.mem.eql(u8, self.key_type, "bytes");
+    /// Generate count method that returns the number of map entries
+    pub fn createReaderCountMethod(self: *const ZigMapField) ![]const u8 {
+        return std.fmt.allocPrint(self.allocator,
+            \\pub fn {s}(self: *const {s}) usize {{
+            \\    return self.{s};
+            \\}}
+        , .{ self.reader_cnt_method_name, self.reader_struct_name, self.reader_cnt_field_name });
+    }
+
+    /// Generate next method that iterates through map entries
+    pub fn createReaderNextMethod(self: *const ZigMapField) ![]const u8 {
         const key_type = try self.keyType();
         const value_type = try self.valueReaderType();
         const key_read = try self.keyRead();
@@ -419,79 +447,85 @@ pub const ZigMapField = struct {
         defer self.allocator.free(value_reader_var);
         defer self.allocator.free(value_read);
 
-        var return_type: []const u8 = undefined;
-        defer self.allocator.free(return_type);
-
-        if (is_str_key) {
-            return_type = try std.fmt.allocPrint(self.allocator, "std.StringHashMap({s})", .{value_type});
-        } else {
-            return_type = try std.fmt.allocPrint(self.allocator, "std.AutoHashMap({s}, {s})", .{ key_type, value_type });
-        }
-
         return std.fmt.allocPrint(self.allocator,
-            \\pub fn {s}(self: *const {s}, allocator: std.mem.Allocator) gremlin.Error!?{s} {{
-            \\    if (self.{s}) |bufs| {{
-            \\        var result = {s}.init(allocator);
-            \\        for (bufs.items) |buf| {{
-            \\            const entry_buf = gremlin.Reader.init(buf);
-            \\            var offset: usize = 0;
-            \\
-            \\            var key: {s} = undefined;
-            \\            var has_key = false;
-            \\            {s}
-            \\            var has_value = false;
-            \\
-            \\            while (entry_buf.hasNext(offset, 0)) {{
-            \\                const tag = try entry_buf.readTagAt(offset);
-            \\                offset += tag.size;
-            \\                switch (tag.number) {{
-            \\                  1 => {{
-            \\                      // read map key
-            \\                      {s}
-            \\                      has_key = true;
-            \\                  }},
-            \\                  2 => {{
-            \\                      // read map value
-            \\                      {s}
-            \\                      has_value = true;
-            \\                  }},
-            \\                  else => {{
-            \\                      offset = try entry_buf.skipData(offset, tag.wire);
-            \\                  }}
-            \\                }}
-            \\            }}
-            \\            if (has_key and has_value) {{
-            \\                try result.put(key, value);
+            \\pub fn {s}(self: *{s}) gremlin.Error!?{s} {{
+            \\    if (self.{s}) |current_offset| {{
+            \\        if (self.{s}) |last_offset| {{
+            \\            if (current_offset >= last_offset) {{
+            \\                self.{s} = null;
+            \\                return null;
             \\            }}
             \\        }}
-            \\        return result;
+            \\
+            \\        var offset = current_offset;
+            \\        const tag = try self.buf.readTagAt(offset);
+            \\        offset += tag.size;
+            \\
+            \\        const result = try self.buf.readBytes(offset);
+            \\        offset += result.size;
+            \\
+            \\        const entry_buf = gremlin.Reader.init(result.value);
+            \\        var entry_offset: usize = 0;
+            \\
+            \\        var key: {s} = undefined;
+            \\        var has_key = false;
+            \\        {s}
+            \\        var has_value = false;
+            \\
+            \\        while (entry_buf.hasNext(entry_offset, 0)) {{
+            \\            const entry_tag = try entry_buf.readTagAt(entry_offset);
+            \\            entry_offset += entry_tag.size;
+            \\            switch (entry_tag.number) {{
+            \\                1 => {{
+            \\                    {s}
+            \\                    has_key = true;
+            \\                }},
+            \\                2 => {{
+            \\                    {s}
+            \\                    has_value = true;
+            \\                }},
+            \\                else => {{
+            \\                    entry_offset = try entry_buf.skipData(entry_offset, entry_tag.wire);
+            \\                }}
+            \\            }}
+            \\        }}
+            \\
+            \\        self.{s} = offset;
+            \\
+            \\        if (has_key and has_value) {{
+            \\            return {s}{{ .key = key, .value = value }};
+            \\        }}
+            \\        return null;
             \\    }}
             \\    return null;
             \\}}
         , .{
-            self.reader_method_name,
+            self.reader_next_method_name,
             self.reader_struct_name,
-            return_type,
-            self.reader_field_name,
-            return_type,
+            self.reader_entry_type_name,
+            self.reader_offset_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_offset_field_name,
             key_type,
             value_reader_var,
             key_read,
             value_read,
+            self.reader_offset_field_name,
+            self.reader_entry_type_name,
         });
     }
 
-    /// Indicates whether the reader needs an allocator (always true for maps)
-    pub fn readerNeedsAllocator(_: *const ZigMapField) bool {
-        return true;
-    }
+    /// Generate reader method that combines both count and next methods
+    pub fn createReaderMethod(self: *const ZigMapField) ![]const u8 {
+        const count_method = try self.createReaderCountMethod();
+        defer self.allocator.free(count_method);
+        const next_method = try self.createReaderNextMethod();
+        defer self.allocator.free(next_method);
 
-    /// Generate cleanup code for reader's temporary storage
-    pub fn createReaderDeinit(self: *const ZigMapField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\if (self.{s}) |arr| {{
-            \\    arr.deinit();
-            \\}}
-        , .{self.reader_field_name});
+            \\{s}
+            \\
+            \\{s}
+        , .{ count_method, next_method });
     }
 };

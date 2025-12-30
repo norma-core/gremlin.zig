@@ -108,6 +108,16 @@ pub const CodeGenerator = struct {
         }
     }
 
+    /// Generate any field-specific declarations (e.g., map entry types).
+    fn generateFieldDeclarations(self: *const CodeGenerator) !void {
+        for (self.target.fields.items) |field| {
+            if (try field.generateDeclarations()) |decl| {
+                defer self.allocator.free(decl);
+                try self.out_file.writeString(decl);
+            }
+        }
+    }
+
     /// Generate the reader struct for deserialization.
     /// Includes fields, initialization, cleanup, and accessor methods.
     fn generateReader(self: *const CodeGenerator) !void {
@@ -118,18 +128,10 @@ pub const CodeGenerator = struct {
 
         self.out_file.depth += 1;
 
-        // Check if we need allocator for any fields
-        var needs_allocator = false;
-        for (self.target.fields.items) |field| {
-            if (field.readerNeedsAllocator()) {
-                needs_allocator = true;
-                break;
-            }
-        }
+        try self.generateFieldDeclarations();
 
-        try self.generateReaderFields(needs_allocator);
-        try self.generateReaderInit(needs_allocator);
-        try self.generateReaderDeinit(needs_allocator);
+        try self.generateReaderFields();
+        try self.generateReaderInit();
         try self.generateReaderGetters();
 
         self.out_file.depth -= 1;
@@ -137,20 +139,21 @@ pub const CodeGenerator = struct {
     }
 
     /// Generate initialization code for the reader.
-    fn generateReaderInit(self: *const CodeGenerator, needs_allocator: bool) !void {
+    fn generateReaderInit(self: *const CodeGenerator) !void {
         if (self.target.fields.items.len == 0) {
             try self.generateEmptyReaderInit();
             return;
         }
 
-        try self.generateFullReaderInit(needs_allocator);
+        try self.generateFullReaderInit();
     }
 
     /// Generate initialization for empty reader (no fields).
     fn generateEmptyReaderInit(self: *const CodeGenerator) !void {
         const formatted = try std.fmt.allocPrint(self.allocator,
-            \\pub fn init(_: std.mem.Allocator, _: []const u8) gremlin.Error!{s} {{
-            \\    return {s}{{}};
+            \\pub fn init(src: []const u8) gremlin.Error!{s} {{
+            \\    const buf = gremlin.Reader.init(src);
+            \\    return {s}{{.buf = buf}};
             \\}}
         , .{ self.target.reader_name, self.target.reader_name });
         defer self.allocator.free(formatted);
@@ -158,43 +161,24 @@ pub const CodeGenerator = struct {
     }
 
     /// Generate initialization for reader with fields.
-    fn generateFullReaderInit(self: *const CodeGenerator, needs_allocator: bool) !void {
-        if (needs_allocator) {
-            const init_sig = try std.fmt.allocPrint(
-                self.allocator,
-                "pub fn init(allocator: std.mem.Allocator, src: []const u8) gremlin.Error!{s} {{",
-                .{self.target.reader_name},
-            );
-            defer self.allocator.free(init_sig);
-            try self.out_file.writeString(init_sig);
-        } else {
-            const init_sig = try std.fmt.allocPrint(
-                self.allocator,
-                "pub fn init(_: std.mem.Allocator, src: []const u8) gremlin.Error!{s} {{",
-                .{self.target.reader_name},
-            );
-            defer self.allocator.free(init_sig);
-            try self.out_file.writeString(init_sig);
-        }
-        try self.out_file.writeString("    var buf = gremlin.Reader.init(src);");
+    fn generateFullReaderInit(self: *const CodeGenerator) !void {
+        const init_sig = try std.fmt.allocPrint(
+            self.allocator,
+            "pub fn init(src: []const u8) gremlin.Error!{s} {{",
+            .{self.target.reader_name},
+        );
+        defer self.allocator.free(init_sig);
+        try self.out_file.writeString(init_sig);
 
-        if (needs_allocator) {
-            const init_res = try std.fmt.allocPrint(
-                self.allocator,
-                "    var res = {s}{{.allocator = allocator, .buf = buf}};",
-                .{self.target.reader_name},
-            );
-            defer self.allocator.free(init_res);
-            try self.out_file.writeString(init_res);
-        } else {
-            const init_res = try std.fmt.allocPrint(
-                self.allocator,
-                "    var res = {s}{{}};",
-                .{self.target.reader_name},
-            );
-            defer self.allocator.free(init_res);
-            try self.out_file.writeString(init_res);
-        }
+        try self.out_file.writeString("    const buf = gremlin.Reader.init(src);");
+
+        const init_res = try std.fmt.allocPrint(
+            self.allocator,
+            "    var res = {s}{{.buf = buf}};",
+            .{self.target.reader_name},
+        );
+        defer self.allocator.free(init_res);
+        try self.out_file.writeString(init_res);
 
         try self.out_file.writeString(
             \\    if (buf.buf.len == 0) {
@@ -226,40 +210,10 @@ pub const CodeGenerator = struct {
         );
     }
 
-    /// Generate cleanup code for the reader.
-    fn generateReaderDeinit(self: *const CodeGenerator, needs_allocator: bool) !void {
-        if (!needs_allocator) {
-            const fmt = try std.fmt.allocPrint(self.allocator, "pub fn deinit(_: *const {s}) void {{ }}\n", .{self.target.reader_name});
-            defer self.allocator.free(fmt);
-            try self.out_file.writeString(fmt);
-            return;
-        }
-
-        const fmt = try std.fmt.allocPrint(self.allocator, "pub fn deinit(self: *const {s}) void {{", .{self.target.reader_name});
-        defer self.allocator.free(fmt);
-        try self.out_file.writeString(fmt);
-        self.out_file.depth += 1;
-
-        // Generate cleanup for each field that needs it
-        for (self.target.fields.items) |field| {
-            const reader_deinit = try field.createReaderDeinit();
-            defer self.allocator.free(reader_deinit);
-            if (reader_deinit.len > 0) {
-                try self.out_file.writeString(reader_deinit);
-            }
-        }
-
-        self.out_file.depth -= 1;
-        try self.out_file.writeString("}");
-    }
-
     /// Generate field definitions for the reader struct.
-    fn generateReaderFields(self: *const CodeGenerator, needs_allocator: bool) !void {
-        // Add allocator and buffer fields if needed
-        if (needs_allocator) {
-            try self.out_file.writeString("allocator: std.mem.Allocator,");
-            try self.out_file.writeString("buf: gremlin.Reader,");
-        }
+    fn generateReaderFields(self: *const CodeGenerator) !void {
+        // Always add buffer field
+        try self.out_file.writeString("buf: gremlin.Reader,");
 
         // Generate field definitions
         for (self.target.fields.items) |field| {
@@ -272,6 +226,14 @@ pub const CodeGenerator = struct {
 
     /// Generate getter methods for reader fields.
     fn generateReaderGetters(self: *const CodeGenerator) !void {
+        // Add sourceBytes method
+        try self.out_file.writeString(
+            \\pub fn sourceBytes(self: *const @This()) []const u8 {
+            \\    return self.buf.buf;
+            \\}
+            \\
+        );
+
         for (self.target.fields.items) |field| {
             const getter = try field.createReaderMethod();
             defer self.allocator.free(getter);
@@ -348,11 +310,10 @@ pub const CodeGenerator = struct {
 
         // Handle empty structs
         if (self.target.fields.items.len == 0) {
-            const empty_encode = try std.fmt.allocPrint(
-                self.allocator,
+            const empty_encode = try std.fmt.allocPrint(self.allocator,
                 \\pub fn encodeTo(_: *const {s}, _: *gremlin.Writer) void {{}}
                 \\
-                ,.{self.target.writer_name});
+            , .{self.target.writer_name});
             defer self.allocator.free(empty_encode);
 
             try self.out_file.writeString(empty_encode);
@@ -360,10 +321,9 @@ pub const CodeGenerator = struct {
         }
 
         // Generate encodeTo function for writing to provided buffer
-        const encode_to = try std.fmt.allocPrint(
-            self.allocator,
+        const encode_to = try std.fmt.allocPrint(self.allocator,
             \\pub fn encodeTo(self: *const {s}, target: *gremlin.Writer) void {{
-                ,.{self.target.writer_name});
+        , .{self.target.writer_name});
         defer self.allocator.free(encode_to);
         try self.out_file.writeString(encode_to);
 

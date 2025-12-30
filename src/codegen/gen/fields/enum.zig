@@ -195,11 +195,6 @@ pub const ZigEnumField = struct {
             .{ self.reader_method_name, self.reader_struct_name, self.resolvedEnum.?, self.reader_field_name },
         );
     }
-
-    /// Indicates whether the reader needs an allocator (it doesn't for enums)
-    pub fn readerNeedsAllocator(_: *const ZigEnumField) bool {
-        return false;
-    }
 };
 
 test "basic enum field" {

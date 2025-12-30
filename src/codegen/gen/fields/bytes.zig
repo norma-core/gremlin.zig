@@ -247,11 +247,6 @@ pub const ZigBytesField = struct {
             return std.fmt.allocPrint(self.allocator, "pub inline fn {s}(self: *const {s}) []const u8 {{ return self.{s} orelse &[_]u8{{}}; }}", .{ self.reader_method_name, self.reader_struct_name, self.reader_field_name });
         }
     }
-
-    /// Indicates whether the reader needs an allocator
-    pub fn readerNeedsAllocator(_: *const ZigBytesField) bool {
-        return false;
-    }
 };
 
 test "basic bytes field" {

@@ -66,7 +66,7 @@ pub fn sizeUsize(value: usize) u32 {
     return sizeVarInt(@as(u64, value));
 }
 
-// Zigzag encoded signed integer types 
+// Zigzag encoded signed integer types
 pub fn sizeSI32(value: i32) u32 {
     return sizeSignedVarInt(@as(i64, value));
 }

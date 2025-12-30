@@ -27,34 +27,26 @@ const scalar = @import("scalar.zig");
 /// Handles both packed and unpacked encoding formats, with specialized
 /// reader implementation to support both formats transparently.
 pub const ZigRepeatableScalarField = struct {
-    // Memory management
     allocator: std.mem.Allocator,
 
-    // Owned struct
     writer_struct_name: []const u8,
     reader_struct_name: []const u8,
 
-    // Scalar type information
-    zig_type: []const u8, // Corresponding Zig type for the scalar
-    sizeFunc_name: []const u8, // Name of size calculation function
-    write_func_name: []const u8, // Name of serialization function
-    read_func_name: []const u8, // Name of deserialization function
+    zig_type: []const u8,
+    sizeFunc_name: []const u8,
+    write_func_name: []const u8,
+    read_func_name: []const u8,
 
-    // Generated names for field access
-    writer_field_name: []const u8, // Name in writer struct
-    reader_field_name: []const u8, // Internal name in reader struct
-    reader_method_name: []const u8, // Public getter method name
+    writer_field_name: []const u8,
+    reader_offset_field_name: []const u8,
+    reader_last_offset_field_name: []const u8,
+    reader_packed_field_name: []const u8,
+    reader_next_method_name: []const u8,
 
-    // Reader implementation details
-    reader_offsets_name: []const u8, // Name for offset storage array
-    reader_wires_name: []const u8, // Name for wire type storage array
+    wire_const_full_name: []const u8,
+    wire_const_name: []const u8,
+    wire_index: i32,
 
-    // Wire format metadata
-    wire_const_full_name: []const u8, // Full qualified wire constant name
-    wire_const_name: []const u8, // Short wire constant name
-    wire_index: i32, // Field number in protocol
-
-    /// Initialize a new ZigRepeatableScalarField with the given parameters
     pub fn init(
         allocator: std.mem.Allocator,
         field_name: []const u8,
@@ -65,10 +57,8 @@ pub const ZigRepeatableScalarField = struct {
         writer_struct_name: []const u8,
         reader_struct_name: []const u8,
     ) !ZigRepeatableScalarField {
-        // Generate field name for the writer struct
         const name = try naming.structFieldName(allocator, field_name, names);
 
-        // Generate wire format constant names
         const wirePostfixed = try std.mem.concat(allocator, u8, &[_][]const u8{ field_name, "Wire" });
         defer allocator.free(wirePostfixed);
         const wireConstName = try naming.constName(allocator, wirePostfixed, names);
@@ -78,10 +68,9 @@ pub const ZigRepeatableScalarField = struct {
             wireConstName,
         });
 
-        // Generate reader method name
-        const reader_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ "get_", field_name });
-        defer allocator.free(reader_prefixed);
-        const readerMethodName = try naming.structMethodName(allocator, reader_prefixed, names);
+        const reader_next_prefixed = try std.mem.concat(allocator, u8, &[_][]const u8{ field_name, "_next" });
+        defer allocator.free(reader_next_prefixed);
+        const readerNextMethodName = try naming.structMethodName(allocator, reader_next_prefixed, names);
 
         return ZigRepeatableScalarField{
             .allocator = allocator,
@@ -92,10 +81,10 @@ pub const ZigRepeatableScalarField = struct {
             .read_func_name = scalar.scalarReader(field_type),
 
             .writer_field_name = name,
-            .reader_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name }),
-            .reader_method_name = readerMethodName,
-            .reader_offsets_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_offsets" }),
-            .reader_wires_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_wires" }),
+            .reader_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_offset" }),
+            .reader_last_offset_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_last_offset" }),
+            .reader_packed_field_name = try std.mem.concat(allocator, u8, &[_][]const u8{ "_", name, "_packed" }),
+            .reader_next_method_name = readerNextMethodName,
 
             .wire_const_full_name = wireName,
             .wire_const_name = wireConstName,
@@ -106,13 +95,12 @@ pub const ZigRepeatableScalarField = struct {
         };
     }
 
-    /// Clean up allocated memory
     pub fn deinit(self: *ZigRepeatableScalarField) void {
         self.allocator.free(self.writer_field_name);
-        self.allocator.free(self.reader_field_name);
-        self.allocator.free(self.reader_method_name);
-        self.allocator.free(self.reader_offsets_name);
-        self.allocator.free(self.reader_wires_name);
+        self.allocator.free(self.reader_offset_field_name);
+        self.allocator.free(self.reader_last_offset_field_name);
+        self.allocator.free(self.reader_packed_field_name);
+        self.allocator.free(self.reader_next_method_name);
         self.allocator.free(self.wire_const_full_name);
         self.allocator.free(self.wire_const_name);
     }
@@ -181,45 +169,44 @@ pub const ZigRepeatableScalarField = struct {
         });
     }
 
-    /// Generate reader struct field declaration.
-    /// Uses separate arrays for offsets and wire types to support both encoding formats.
     pub fn createReaderStructField(self: *const ZigRepeatableScalarField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\{s}: ?std.ArrayList(usize) = null,
-            \\{s}: ?std.ArrayList(gremlin.ProtoWireType) = null,
+            \\{s}: ?usize = null,
+            \\{s}: ?usize = null,
+            \\{s}: bool = false,
         , .{
-            self.reader_offsets_name,
-            self.reader_wires_name,
+            self.reader_offset_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_packed_field_name,
         });
     }
 
-    /// Generate deserialization case statement.
-    /// Stores offset and wire type information for later processing.
     pub fn createReaderCase(self: *const ZigRepeatableScalarField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
             \\    if (res.{s} == null) {{
-            \\        res.{s} = std.ArrayList(usize).init(allocator);
-            \\        res.{s} = std.ArrayList(gremlin.ProtoWireType).init(allocator);
+            \\        res.{s} = offset;
             \\    }}
-            \\    try res.{s}.?.append(offset);
-            \\    try res.{s}.?.append(tag.wire);
             \\    if (tag.wire == gremlin.ProtoWireType.bytes) {{
+            \\        res.{s} = true;
             \\        const length_result = try buf.readVarInt(offset);
-            \\        offset += length_result.size + @as(usize, @intCast(length_result.value));
+            \\        res.{s} = offset + length_result.size + @as(usize, @intCast(length_result.value));
+            \\        offset = res.{s}.?;
             \\    }} else {{
             \\        const result = try buf.{s}(offset);
             \\        offset += result.size;
+            \\        res.{s} = offset;
             \\    }}
             \\}},
         , .{
             self.wire_const_full_name,
-            self.reader_offsets_name,
-            self.reader_offsets_name,
-            self.reader_wires_name,
-            self.reader_offsets_name,
-            self.reader_wires_name,
+            self.reader_offset_field_name,
+            self.reader_offset_field_name,
+            self.reader_packed_field_name,
+            self.reader_last_offset_field_name,
+            self.reader_last_offset_field_name,
             self.read_func_name,
+            self.reader_last_offset_field_name,
         });
     }
 
@@ -227,65 +214,51 @@ pub const ZigRepeatableScalarField = struct {
     /// Handles both packed and unpacked formats transparently.
     pub fn createReaderMethod(self: *const ZigRepeatableScalarField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
-            \\pub fn {s}(self: *const {s}, allocator: std.mem.Allocator) gremlin.Error![]{s} {{
-            \\    if (self.{s}) |offsets| {{
-            \\        if (offsets.items.len == 0) return &[_]{s}{{}};
+            \\pub fn {s}(self: *{s}) gremlin.Error!?{s} {{
+            \\    if (self.{s} == null) return null;
             \\
-            \\        var result = std.ArrayList({s}).init(allocator);
-            \\        errdefer result.deinit();
+            \\    const current_offset = self.{s}.?;
+            \\    if (current_offset >= self.{s}.?) {{
+            \\        self.{s} = null;
+            \\        return null;
+            \\    }}
             \\
-            \\        for (offsets.items, self.{s}.?.items) |start_offset, wire_type| {{
-            \\            if (wire_type == .bytes) {{
-            \\                const length_result = try self.buf.readVarInt(start_offset);
-            \\                var offset = start_offset + length_result.size;
-            \\                const end_offset = offset + @as(usize, @intCast(length_result.value));
+            \\    if (self.{s}) {{
+            \\        const value_result = try self.buf.{s}(current_offset);
+            \\        self.{s} = current_offset + value_result.size;
             \\
-            \\                while (offset < end_offset) {{
-            \\                    const value_result = try self.buf.{s}(offset);
-            \\                    try result.append(value_result.value);
-            \\                    offset += value_result.size;
-            \\                }}
+            \\        if (self.{s}.? >= self.{s}.?) {{
+            \\            self.{s} = null;
+            \\        }}
+            \\
+            \\        return value_result.value;
+            \\    }} else {{
+            \\        const value_result = try self.buf.{s}(current_offset);
+            \\        const next_offset = current_offset + value_result.size;
+            \\
+            \\        if (next_offset >= self.{s}.? or !self.buf.hasNext(next_offset, 0)) {{
+            \\            self.{s} = null;
+            \\        }} else {{
+            \\            const next_tag = try self.buf.readTagAt(next_offset);
+            \\            if (next_tag.number == {s}) {{
+            \\                self.{s} = next_offset + next_tag.size;
             \\            }} else {{
-            \\                const value_result = try self.buf.{s}(start_offset);
-            \\                try result.append(value_result.value);
+            \\                self.{s} = null;
             \\            }}
             \\        }}
-            \\        return result.toOwnedSlice();
+            \\
+            \\        return value_result.value;
             \\    }}
-            \\    return &[_]{s}{{}};
             \\}}
         , .{
-            self.reader_method_name,
-            self.reader_struct_name,
-            self.zig_type,
-            self.reader_offsets_name,
-            self.zig_type,
-            self.zig_type,
-            self.reader_wires_name,
-            self.read_func_name,
-            self.read_func_name,
-            self.zig_type,
+            self.reader_next_method_name,  self.reader_struct_name,       self.zig_type,
+            self.reader_offset_field_name, self.reader_offset_field_name, self.reader_last_offset_field_name,
+            self.reader_offset_field_name, self.reader_packed_field_name, self.read_func_name,
+            self.reader_offset_field_name, self.reader_offset_field_name, self.reader_last_offset_field_name,
+            self.reader_offset_field_name, self.read_func_name,           self.reader_last_offset_field_name,
+            self.reader_offset_field_name, self.wire_const_full_name,     self.reader_offset_field_name,
+            self.reader_offset_field_name,
         });
-    }
-
-    /// Generate cleanup code for reader's temporary storage
-    pub fn createReaderDeinit(self: *const ZigRepeatableScalarField) ![]const u8 {
-        return std.fmt.allocPrint(self.allocator,
-            \\if (self.{s}) |arr| {{
-            \\    arr.deinit();
-            \\}}
-            \\if (self.{s}) |arr| {{
-            \\    arr.deinit();
-            \\}}
-        , .{
-            self.reader_offsets_name,
-            self.reader_wires_name,
-        });
-    }
-
-    /// Indicates whether the reader needs an allocator (always true for arrays)
-    pub fn readerNeedsAllocator(_: *const ZigRepeatableScalarField) bool {
-        return true;
     }
 };
 
@@ -368,8 +341,9 @@ test "basic repeatable scalar field" {
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
     try std.testing.expectEqualStrings(
-        \\_number_field_offsets: ?std.ArrayList(usize) = null,
-        \\_number_field_wires: ?std.ArrayList(gremlin.ProtoWireType) = null,
+        \\_number_field_offset: ?usize = null,
+        \\_number_field_last_offset: ?usize = null,
+        \\_number_field_packed: bool = false,
     , reader_field_code);
 
     // Test reader case
@@ -377,18 +351,18 @@ test "basic repeatable scalar field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.NUMBER_FIELD_WIRE => {
-        \\    if (res._number_field_offsets == null) {
-        \\        res._number_field_offsets = std.ArrayList(usize).init(allocator);
-        \\        res._number_field_wires = std.ArrayList(gremlin.ProtoWireType).init(allocator);
+        \\    if (res._number_field_offset == null) {
+        \\        res._number_field_offset = offset;
         \\    }
-        \\    try res._number_field_offsets.?.append(offset);
-        \\    try res._number_field_wires.?.append(tag.wire);
         \\    if (tag.wire == gremlin.ProtoWireType.bytes) {
+        \\        res._number_field_packed = true;
         \\        const length_result = try buf.readVarInt(offset);
-        \\        offset += length_result.size + @as(usize, @intCast(length_result.value));
+        \\        res._number_field_last_offset = offset + length_result.size + @as(usize, @intCast(length_result.value));
+        \\        offset = res._number_field_last_offset.?;
         \\    } else {
         \\        const result = try buf.readInt32(offset);
         \\        offset += result.size;
+        \\        res._number_field_last_offset = offset;
         \\    }
         \\},
     , reader_case_code);
@@ -397,44 +371,41 @@ test "basic repeatable scalar field" {
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
     try std.testing.expectEqualStrings(
-        \\pub fn getNumberField(self: *const TestReader, allocator: std.mem.Allocator) gremlin.Error![]i32 {
-        \\    if (self._number_field_offsets) |offsets| {
-        \\        if (offsets.items.len == 0) return &[_]i32{};
+        \\pub fn numberFieldNext(self: *TestReader) gremlin.Error!?i32 {
+        \\    if (self._number_field_offset == null) return null;
         \\
-        \\        var result = std.ArrayList(i32).init(allocator);
-        \\        errdefer result.deinit();
+        \\    const current_offset = self._number_field_offset.?;
+        \\    if (current_offset >= self._number_field_last_offset.?) {
+        \\        self._number_field_offset = null;
+        \\        return null;
+        \\    }
         \\
-        \\        for (offsets.items, self._number_field_wires.?.items) |start_offset, wire_type| {
-        \\            if (wire_type == .bytes) {
-        \\                const length_result = try self.buf.readVarInt(start_offset);
-        \\                var offset = start_offset + length_result.size;
-        \\                const end_offset = offset + @as(usize, @intCast(length_result.value));
+        \\    if (self._number_field_packed) {
+        \\        const value_result = try self.buf.readInt32(current_offset);
+        \\        self._number_field_offset = current_offset + value_result.size;
         \\
-        \\                while (offset < end_offset) {
-        \\                    const value_result = try self.buf.readInt32(offset);
-        \\                    try result.append(value_result.value);
-        \\                    offset += value_result.size;
-        \\                }
+        \\        if (self._number_field_offset.? >= self._number_field_last_offset.?) {
+        \\            self._number_field_offset = null;
+        \\        }
+        \\
+        \\        return value_result.value;
+        \\    } else {
+        \\        const value_result = try self.buf.readInt32(current_offset);
+        \\        const next_offset = current_offset + value_result.size;
+        \\
+        \\        if (next_offset >= self._number_field_last_offset.? or !self.buf.hasNext(next_offset, 0)) {
+        \\            self._number_field_offset = null;
+        \\        } else {
+        \\            const next_tag = try self.buf.readTagAt(next_offset);
+        \\            if (next_tag.number == TestWire.NUMBER_FIELD_WIRE) {
+        \\                self._number_field_offset = next_offset + next_tag.size;
         \\            } else {
-        \\                const value_result = try self.buf.readInt32(start_offset);
-        \\                try result.append(value_result.value);
+        \\                self._number_field_offset = null;
         \\            }
         \\        }
-        \\        return result.toOwnedSlice();
+        \\
+        \\        return value_result.value;
         \\    }
-        \\    return &[_]i32{};
         \\}
     , reader_method_code);
-
-    // Test deinit
-    const deinit_code = try zig_field.createReaderDeinit();
-    defer std.testing.allocator.free(deinit_code);
-    try std.testing.expectEqualStrings(
-        \\if (self._number_field_offsets) |arr| {
-        \\    arr.deinit();
-        \\}
-        \\if (self._number_field_wires) |arr| {
-        \\    arr.deinit();
-        \\}
-    , deinit_code);
 }

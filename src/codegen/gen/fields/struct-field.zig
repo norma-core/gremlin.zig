@@ -99,22 +99,11 @@ pub const Field = union(enum) {
         };
     }
 
-    /// Indicates whether field's reader needs allocator
-    pub fn readerNeedsAllocator(self: Field) bool {
+    /// Generates any top-level declarations needed by the field (e.g., map entry types)
+    pub fn generateDeclarations(self: Field) !?[]const u8 {
         return switch (self) {
-            inline else => |f| f.readerNeedsAllocator(),
-        };
-    }
-
-    /// Creates cleanup code for reader's storage
-    pub fn createReaderDeinit(self: Field) ![]const u8 {
-        return switch (self) {
-            .repeated_bytes => |f| f.createReaderDeinit(),
-            .repeated_message => |f| f.createReaderDeinit(),
-            .repeated_enum => |f| f.createReaderDeinit(),
-            .repeated_scalar => |f| f.createReaderDeinit(),
-            .map => |f| f.createReaderDeinit(),
-            else => "",
+            .map => |f| try f.generateDeclarations(),
+            else => null,
         };
     }
 
