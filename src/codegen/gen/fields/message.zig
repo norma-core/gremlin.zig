@@ -262,7 +262,7 @@ test "basic message field" {
         \\    const result = try buf.readBytes(offset);
         \\    offset += result.size;
         \\    res._message_field_buf = result.value;
-        \\}
+        \\},
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();

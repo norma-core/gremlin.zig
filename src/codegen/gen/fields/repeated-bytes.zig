@@ -320,7 +320,7 @@ test "repeatable bytes field with null values" {
         \\    }
         \\    res._data_field_last_offset = offset;
         \\    res._data_field_cnt += 1;
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method - we'll just check it compiles for now

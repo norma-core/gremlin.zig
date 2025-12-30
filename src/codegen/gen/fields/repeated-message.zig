@@ -353,7 +353,7 @@ test "basic repeatable message field" {
         \\    }
         \\    res._messages_last_offset = offset;
         \\    res._messages_cnt += 1;
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method - we'll just check it compiles for now

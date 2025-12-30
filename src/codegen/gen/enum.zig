@@ -219,6 +219,5 @@ test "enum generation" {
         \\    FOREIGN_BAZ = 2,
         \\};
         \\
-        \\
     , code);
 }

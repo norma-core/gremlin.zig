@@ -396,10 +396,8 @@ test "basic field" {
         \\    const result = try buf.readUInt64(offset);
         \\    offset += result.size;
         \\    res._uint_field = result.value;
-        \\}
-    ,
-        reader_case_code,
-    );
+        \\},
+    , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
@@ -473,10 +471,8 @@ test "default field" {
         \\    const result = try buf.readInt32(offset);
         \\    offset += result.size;
         \\    res._int_field = result.value;
-        \\}
-    ,
-        reader_case_code,
-    );
+        \\},
+    , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);

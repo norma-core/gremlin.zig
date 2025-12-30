@@ -364,7 +364,7 @@ test "basic repeatable enum field" {
         \\        offset += result.size;
         \\        res._enum_field_last_offset = offset;
         \\    }
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method

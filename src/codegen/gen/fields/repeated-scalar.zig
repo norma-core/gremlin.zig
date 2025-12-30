@@ -366,7 +366,7 @@ test "basic repeatable scalar field" {
         \\        offset += result.size;
         \\        res._number_field_last_offset = offset;
         \\    }
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method

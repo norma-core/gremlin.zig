@@ -279,7 +279,7 @@ test "basic enum field" {
         \\    const result = try buf.readInt32(offset);
         \\    offset += result.size;
         \\    res._enum_field = @enumFromInt(result.value);
-        \\}
+        \\},
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();
@@ -354,7 +354,7 @@ test "enum field with default" {
         \\    const result = try buf.readInt32(offset);
         \\    offset += result.size;
         \\    res._enum_field = @enumFromInt(result.value);
-        \\}
+        \\},
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();

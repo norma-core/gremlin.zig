@@ -329,7 +329,7 @@ test "basic bytes field" {
         \\    const result = try buf.readBytes(offset);
         \\    offset += result.size;
         \\    res._data_field = result.value;
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method
@@ -419,7 +419,7 @@ test "bytes field with default" {
         \\    const result = try buf.readBytes(offset);
         \\    offset += result.size;
         \\    res._data_field = result.value;
-        \\}
+        \\},
     , reader_case_code);
 
     // Test reader method
