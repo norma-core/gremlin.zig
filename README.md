@@ -6,7 +6,7 @@ A zero-dependency, zero-allocation Google Protocol Buffers implementation in pur
 
 Single command setup:
 ```bash
-zig fetch --save https://github.com/norma-core/gremlin.zig/archive/refs/heads/zig-0.15.zip
+zig fetch --save https://github.com/norma-core/gremlin.zig/archive/refs/heads/master.zip
 ```
 
 This command will:
