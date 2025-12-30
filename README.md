@@ -6,7 +6,7 @@ A zero-dependency, zero-allocation Google Protocol Buffers implementation in pur
 
 Single command setup:
 ```bash
-zig fetch --save https://github.com/norma-core/gremlin.zig/archive/refs/tags/0.1.0.tar.gz
+zig fetch --save https://github.com/norma-core/gremlin.zig/archive/refs/heads/zig-0.15.zip
 ```
 
 This command will:
@@ -23,11 +23,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Get the parser dependency
+    // Get the gremlin dependency
     const gremlin_dep = b.dependency("gremlin", .{
         .target = target,
         .optimize = optimize,
-    }).module("gremlin");
+    });
+
+    // Get the gremlin module for imports
+    const gremlin_module = gremlin_dep.module("gremlin");
 
     // Generate Zig code from .proto files
     // This will process all .proto files in the proto/ directory
@@ -35,6 +38,7 @@ pub fn build(b: *std.Build) void {
     const protobuf = ProtoGenStep.create(
         b,
         .{
+            .name = "protobuf",                  // Name for the build step
             .proto_sources = b.path("proto"),    // Directory containing .proto files
             .target = b.path("src/gen"),         // Output directory for generated Zig code
         },
@@ -43,13 +47,15 @@ pub fn build(b: *std.Build) void {
     // Create binary
     const exe = b.addExecutable(.{
         .name = "example",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
 
-    // Add the parser module
-    exe.root_module.addImport("gremlin", gremlin_dep);
+    // Add the gremlin module
+    exe.root_module.addImport("gremlin", gremlin_module);
     exe.step.dependOn(&protobuf.step);
 
     b.installArtifact(exe);
@@ -151,7 +157,7 @@ pub fn main() !void {
     std.debug.print("ID: {}\n", .{reader.getId()});
     
     // Iterate over repeated fields
-    while (reader.repeatedTagsNext()) |tag| {
+    while (reader.tagsNext()) |tag| {
         std.debug.print("Tag: {s}\n", .{tag});
     }
 }
@@ -163,29 +169,29 @@ The generated readers provide `next()` methods for iterating over repeated field
 
 ```zig
 // For repeated string field 'tags'
-pub fn repeatedTagsNext(self: *UserReader) ?[]const u8 {
+pub fn tagsNext(self: *UserReader) ?[]const u8 {
     // Returns next value or null when done
 }
 
 // For repeated scalar fields (e.g., repeated int32 values)
-pub fn repeatedValuesNext(self: *UserReader) gremlin.Error!?i32 {
+pub fn valuesNext(self: *UserReader) gremlin.Error!?i32 {
     // Returns next value or null when done
 }
 
 // For repeated message fields
-pub fn repeatedMessagesNext(self: *UserReader) ?MessageReader {
+pub fn messagesNext(self: *UserReader) ?MessageReader {
     // Returns next message reader or null when done
 }
 
 // Optional: get count of repeated items
-pub fn repeatedTagsCount(self: *const UserReader) usize {
+pub fn tagsCount(self: *const UserReader) usize {
     // Returns total count
 }
 ```
 
 This pattern applies to all repeated field types:
-- Repeated scalars: `repeatedFieldNameNext()` returns `gremlin.Error!?T` where T is the scalar type
-- Repeated messages: `repeatedFieldNameNext()` returns `?MessageReader`
-- Repeated strings/bytes: `repeatedFieldNameNext()` returns `?[]const u8`
+- Repeated scalars: `fieldNameNext()` returns `gremlin.Error!?T` where T is the scalar type
+- Repeated messages: `fieldNameNext()` returns `?MessageReader`
+- Repeated strings/bytes: `fieldNameNext()` returns `?[]const u8`
 
 The readers maintain internal state for iteration, so you can call `next()` repeatedly to traverse all values. No allocations are required as the readers work directly with the underlying protobuf buffer.

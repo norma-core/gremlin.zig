@@ -26,6 +26,6 @@ pub fn main() !void {
     const encoded = try user.encode(allocator);
     defer allocator.free(encoded);
 
-    const decoded = try pb.UserReader.init(allocator, encoded);
+    const decoded = try pb.UserReader.init(encoded);
     std.debug.print("Decoded user: {d}\n", .{decoded.getId()});
 }
