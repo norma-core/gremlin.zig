@@ -172,12 +172,12 @@ test "parse path components" {
 
 test "parse multiple imports" {
     const import_text =
-    \\import "google/protobuf/any.proto";
-    \\import "google/protobuf/duration.proto";
-    \\import "google/protobuf/field_mask.proto";
-    \\import "google/protobuf/struct.proto";
-    \\import "google/protobuf/timestamp.proto";
-    \\import "google/protobuf/wrappers.proto";
+        \\import "google/protobuf/any.proto";
+        \\import "google/protobuf/duration.proto";
+        \\import "google/protobuf/field_mask.proto";
+        \\import "google/protobuf/struct.proto";
+        \\import "google/protobuf/timestamp.proto";
+        \\import "google/protobuf/wrappers.proto";
     ;
 
     var buf = ParserBuffer.init(import_text);

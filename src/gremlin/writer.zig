@@ -654,26 +654,22 @@ test "writer append float32" {
 }
 
 test "writer append float64" {
-    const test_cases = .{
-        .{
-            .name = "zero",
-            .tag = @as(ProtoWireNumber, 1),
-            .data = @as(f64, 0.0),
-            .want = &[_]u8{ 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        .{
-            .name = "positive small",
-            .tag = @as(ProtoWireNumber, 1),
-            .data = @as(f64, 3.14159265359),
-            .want = &[_]u8{ 0x09, 0xea, 0x2e, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x40 },
-        },
-        .{
-            .name = "negative small",
-            .tag = @as(ProtoWireNumber, 1),
-            .data = @as(f64, -3.14159265359),
-            .want = &[_]u8{ 0x09, 0xea, 0x2e, 0x44, 0x54, 0xfb, 0x21, 0x09, 0xc0 },
-        }
-    };
+    const test_cases = .{ .{
+        .name = "zero",
+        .tag = @as(ProtoWireNumber, 1),
+        .data = @as(f64, 0.0),
+        .want = &[_]u8{ 0x09, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
+    }, .{
+        .name = "positive small",
+        .tag = @as(ProtoWireNumber, 1),
+        .data = @as(f64, 3.14159265359),
+        .want = &[_]u8{ 0x09, 0xea, 0x2e, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x40 },
+    }, .{
+        .name = "negative small",
+        .tag = @as(ProtoWireNumber, 1),
+        .data = @as(f64, -3.14159265359),
+        .want = &[_]u8{ 0x09, 0xea, 0x2e, 0x44, 0x54, 0xfb, 0x21, 0x09, 0xc0 },
+    } };
 
     var buf: [64]u8 = undefined;
     inline for (test_cases) |tc| {

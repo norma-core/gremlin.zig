@@ -81,10 +81,7 @@ pub const Group = struct {
             }
         }
 
-        return Group{
-            .start = offset,
-            .end = buf.offset
-        };
+        return Group{ .start = offset, .end = buf.offset };
     }
 };
 

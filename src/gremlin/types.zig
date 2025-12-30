@@ -57,9 +57,8 @@ pub const SizedBool = Sized(bool);
 pub const SizedBytes = Sized([]const u8);
 
 /// Protocol buffer encoding/decoding errors
-pub const Error = error{
-    InvalidVarInt, // Invalid variable integer encoding
+pub const Error = error{ InvalidVarInt, // Invalid variable integer encoding
     InvalidTag, // Invalid field tag
     InvalidData, // Data doesn't match expected format
     OutOfMemory // Memory allocation failed
-};
+    };
