@@ -194,12 +194,12 @@ pub const ZigRepeatableMessageField = struct {
     pub fn createReaderCase(self: *const ZigRepeatableMessageField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
-            \\    if (res.{s} == null) {{
-            \\        res.{s} = offset;
-            \\    }}
             \\    const result = try buf.readBytes(offset);
             \\    offset += result.size;
-            \\    res.{s} = offset - result.size;
+            \\    if (res.{s} == null) {{
+            \\        res.{s} = offset - result.size;
+            \\    }}
+            \\    res.{s} = offset;
             \\    res.{s} += 1;
             \\}},
         , .{
@@ -247,7 +247,8 @@ pub const ZigRepeatableMessageField = struct {
             \\        }}
             \\    }}
             \\
-            \\    unreachable;
+            \\    self.{s} = null;
+            \\    return msg;
             \\}}
         , .{
             self.reader_count_method_name,      self.reader_struct_name,            self.reader_cnt_field_name,
@@ -255,7 +256,7 @@ pub const ZigRepeatableMessageField = struct {
             self.reader_offset_field_name,      self.reader_offset_field_name,      self.resolved_reader_type.?,
             self.reader_last_offset_field_name, self.reader_last_offset_field_name, self.reader_offset_field_name,
             self.reader_last_offset_field_name, self.reader_last_offset_field_name, self.wire_const_full_name,
-            self.reader_offset_field_name,
+            self.reader_offset_field_name,      self.reader_offset_field_name,
         });
     }
 };
@@ -345,12 +346,12 @@ test "basic repeatable message field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.MESSAGES_WIRE => {
-        \\    if (res._messages_offset == null) {
-        \\        res._messages_offset = offset;
-        \\    }
         \\    const result = try buf.readBytes(offset);
         \\    offset += result.size;
-        \\    res._messages_last_offset = offset - result.size;
+        \\    if (res._messages_offset == null) {
+        \\        res._messages_offset = offset - result.size;
+        \\    }
+        \\    res._messages_last_offset = offset;
         \\    res._messages_cnt += 1;
         \\},
     , reader_case_code);

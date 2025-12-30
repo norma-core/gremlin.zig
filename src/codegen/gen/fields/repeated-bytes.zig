@@ -164,12 +164,12 @@ pub const ZigRepeatableBytesField = struct {
     pub fn createReaderCase(self: *const ZigRepeatableBytesField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
-            \\    if (res.{s} == null) {{
-            \\        res.{s} = offset;
-            \\    }}
             \\    const result = try buf.readBytes(offset);
             \\    offset += result.size;
-            \\    res.{s} = offset - result.size;
+            \\    if (res.{s} == null) {{
+            \\        res.{s} = offset - result.size;
+            \\    }}
+            \\    res.{s} = offset;
             \\    res.{s} += 1;
             \\}},
         , .{
@@ -216,14 +216,15 @@ pub const ZigRepeatableBytesField = struct {
             \\        }}
             \\    }}
             \\
-            \\    unreachable;
+            \\    self.{s} = null;
+            \\    return result.value;
             \\}}
         , .{
             self.reader_count_method_name, self.reader_struct_name,            self.reader_cnt_field_name,
             self.reader_next_method_name,  self.reader_struct_name,            self.reader_offset_field_name,
             self.reader_offset_field_name, self.reader_last_offset_field_name, self.reader_last_offset_field_name,
             self.reader_offset_field_name, self.reader_last_offset_field_name, self.reader_last_offset_field_name,
-            self.wire_const_full_name,     self.reader_offset_field_name,
+            self.wire_const_full_name,     self.reader_offset_field_name,      self.reader_offset_field_name,
         });
     }
 };
@@ -312,12 +313,12 @@ test "repeatable bytes field with null values" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.DATA_FIELD_WIRE => {
-        \\    if (res._data_field_offset == null) {
-        \\        res._data_field_offset = offset;
-        \\    }
         \\    const result = try buf.readBytes(offset);
         \\    offset += result.size;
-        \\    res._data_field_last_offset = offset - result.size;
+        \\    if (res._data_field_offset == null) {
+        \\        res._data_field_offset = offset - result.size;
+        \\    }
+        \\    res._data_field_last_offset = offset;
         \\    res._data_field_cnt += 1;
         \\},
     , reader_case_code);

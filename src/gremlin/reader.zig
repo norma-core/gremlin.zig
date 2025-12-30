@@ -155,7 +155,7 @@ pub const Reader = struct {
     pub fn readInt32(self: Reader, offset: usize) Error!types.SizedI32 {
         const result = try self.readVarIntAt(offset);
         return .{
-            .value = @as(i32, @truncate(@as(i64, @bitCast(result.value)))),
+            .value = @as(i32, @bitCast(@as(u32, @truncate(result.value)))),
             .size = result.size,
         };
     }

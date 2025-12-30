@@ -1,12 +1,12 @@
 # gremlin
 
-A zero-dependency Google Protocol Buffers implementation in pure Zig (no protoc required)
+A zero-dependency, zero-allocation Google Protocol Buffers implementation in pure Zig (no protoc required)
 
 ## Installation & Setup
 
 Single command setup:
 ```bash
-zig fetch --save https://github.com/octopus-foundation/gremlin.zig/archive/refs/tags/0.0.0.tar.gz
+zig fetch --save https://github.com/norma-core/gremlin.zig/archive/refs/tags/0.1.0.tar.gz
 ```
 
 This command will:
@@ -62,9 +62,9 @@ pub fn build(b: *std.Build) void {
 - Pure Zig implementation (no protoc required)
 - Compatible with Protocol Buffers version 2 and 3
 - Simple integration with Zig build system
-- Single! allocation for serialization (including complex recursive messages)
-- Lazy parsing - parses only required complex fields
-- Tested with Zig 0.14.0-dev
+- Single allocation for serialization (including complex recursive messages)
+- Zero-allocation readers with lazy parsing - parses only required complex fields
+- Tested with Zig 0.15.2
 
 ## Generated code
 
@@ -109,20 +109,83 @@ pub const User = struct {
     pub fn encodeTo(self: *const User, target: *gremlin.Writer) void { ... }
 };
 
-// Reader for lazy parsing
+// Reader for lazy parsing (zero allocations)
 pub const UserReader = struct {
-    allocator: std.mem.Allocator,
     buf: gremlin.Reader,
-    _name: ?[]const u8 = null, 
+    _name: ?[]const u8 = null,
     _id: u64 = 0,
-    _tags: ?std.ArrayList([]const u8) = null,
+    ...
 
-    pub fn init(allocator: std.mem.Allocator, src: []const u8) gremlin.Error!UserReader { ... }
-    pub fn deinit(self: *const UserReader) void { ... }
+    pub fn init(src: []const u8) gremlin.Error!UserReader { ... }
     
     // Accessor methods
     pub inline fn getName(self: *const UserReader) []const u8 { ... }
     pub inline fn getId(self: *const UserReader) u64 { ... }
-    pub fn getTags(self: *const UserReader) []const []const u8 { ... }
+    
 };
 ```
+
+## Usage Example
+
+```zig
+const std = @import("std");
+const proto = @import("gen/example.proto.zig");
+
+pub fn main() !void {
+    // Encoding
+    const user = proto.User{
+        .name = "Alice",
+        .id = 12345,
+        .tags = &[_]?[]const u8{ "admin", "verified" },
+    };
+    
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    const encoded = try user.encode(allocator);
+    defer allocator.free(encoded);
+    
+    // Decoding with zero-allocation reader
+    var reader = try proto.UserReader.init(encoded);
+    
+    std.debug.print("Name: {s}\n", .{reader.getName()});
+    std.debug.print("ID: {}\n", .{reader.getId()});
+    
+    // Iterate over repeated fields
+    while (reader.repeatedTagsNext()) |tag| {
+        std.debug.print("Tag: {s}\n", .{tag});
+    }
+}
+```
+
+### Reader API for Repeated Fields
+
+The generated readers provide `next()` methods for iterating over repeated fields without allocations:
+
+```zig
+// For repeated string field 'tags'
+pub fn repeatedTagsNext(self: *UserReader) ?[]const u8 {
+    // Returns next value or null when done
+}
+
+// For repeated scalar fields (e.g., repeated int32 values)
+pub fn repeatedValuesNext(self: *UserReader) gremlin.Error!?i32 {
+    // Returns next value or null when done
+}
+
+// For repeated message fields
+pub fn repeatedMessagesNext(self: *UserReader) ?MessageReader {
+    // Returns next message reader or null when done
+}
+
+// Optional: get count of repeated items
+pub fn repeatedTagsCount(self: *const UserReader) usize {
+    // Returns total count
+}
+```
+
+This pattern applies to all repeated field types:
+- Repeated scalars: `repeatedFieldNameNext()` returns `gremlin.Error!?T` where T is the scalar type
+- Repeated messages: `repeatedFieldNameNext()` returns `?MessageReader`
+- Repeated strings/bytes: `repeatedFieldNameNext()` returns `?[]const u8`
+
+The readers maintain internal state for iteration, so you can call `next()` repeatedly to traverse all values. No allocations are required as the readers work directly with the underlying protobuf buffer.

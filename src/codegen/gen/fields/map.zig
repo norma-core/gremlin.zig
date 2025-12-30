@@ -458,9 +458,6 @@ pub const ZigMapField = struct {
             \\        }}
             \\
             \\        var offset = current_offset;
-            \\        const tag = try self.buf.readTagAt(offset);
-            \\        offset += tag.size;
-            \\
             \\        const result = try self.buf.readBytes(offset);
             \\        offset += result.size;
             \\
@@ -490,7 +487,23 @@ pub const ZigMapField = struct {
             \\            }}
             \\        }}
             \\
-            \\        self.{s} = offset;
+            \\        // Find next map entry in the main buffer
+            \\        var next_offset = offset;
+            \\        const max_offset = self.{s}.?;
+            \\
+            \\        while (next_offset < max_offset and self.buf.hasNext(next_offset, 0)) {{
+            \\            const tag = try self.buf.readTagAt(next_offset);
+            \\            next_offset += tag.size;
+            \\
+            \\            if (tag.number == {s}) {{
+            \\                self.{s} = next_offset;
+            \\                break;
+            \\            }} else {{
+            \\                next_offset = try self.buf.skipData(next_offset, tag.wire);
+            \\            }}
+            \\        }} else {{
+            \\            self.{s} = null;
+            \\        }}
             \\
             \\        if (has_key and has_value) {{
             \\            return {s}{{ .key = key, .value = value }};
@@ -510,6 +523,9 @@ pub const ZigMapField = struct {
             value_reader_var,
             key_read,
             value_read,
+            self.reader_last_offset_field_name,
+            self.wire_const_full_name,
+            self.reader_offset_field_name,
             self.reader_offset_field_name,
             self.reader_entry_type_name,
         });

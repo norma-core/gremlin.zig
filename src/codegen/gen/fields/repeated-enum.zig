@@ -190,6 +190,7 @@ pub const ZigRepeatableEnumField = struct {
             \\    if (tag.wire == gremlin.ProtoWireType.bytes) {{
             \\        res.{s} = true;
             \\        const length_result = try buf.readVarInt(offset);
+            \\        res.{s} = offset + length_result.size;  // Point to the first value, not the length
             \\        res.{s} = offset + length_result.size + @as(usize, @intCast(length_result.value));
             \\        offset = res.{s}.?;
             \\    }} else {{
@@ -203,6 +204,7 @@ pub const ZigRepeatableEnumField = struct {
             self.reader_offset_field_name,
             self.reader_offset_field_name,
             self.reader_packed_field_name,
+            self.reader_offset_field_name,
             self.reader_last_offset_field_name,
             self.reader_last_offset_field_name,
             self.reader_last_offset_field_name,
@@ -231,19 +233,23 @@ pub const ZigRepeatableEnumField = struct {
             \\        return @enumFromInt(value_result.value);
             \\    }} else {{
             \\        const value_result = try self.buf.readInt32(current_offset);
-            \\        const next_offset = current_offset + value_result.size;
+            \\        var next_offset = current_offset + value_result.size;
+            \\        const max_offset = self.{s}.?;
             \\
-            \\        if (next_offset >= self.{s}.? or !self.buf.hasNext(next_offset, 0)) {{
-            \\            self.{s} = null;
-            \\        }} else {{
+            \\        // Search for the next occurrence of this field
+            \\        while (next_offset < max_offset and self.buf.hasNext(next_offset, 0)) {{
             \\            const next_tag = try self.buf.readTagAt(next_offset);
+            \\            next_offset += next_tag.size;
+            \\
             \\            if (next_tag.number == {s}) {{
-            \\                self.{s} = next_offset + next_tag.size;
+            \\                self.{s} = next_offset;
+            \\                return @enumFromInt(value_result.value);
             \\            }} else {{
-            \\                self.{s} = null;
+            \\                next_offset = try self.buf.skipData(next_offset, next_tag.wire);
             \\            }}
             \\        }}
             \\
+            \\        self.{s} = null;
             \\        return @enumFromInt(value_result.value);
             \\    }}
             \\}}
@@ -252,8 +258,8 @@ pub const ZigRepeatableEnumField = struct {
             self.reader_offset_field_name,      self.reader_offset_field_name,      self.reader_last_offset_field_name,
             self.reader_offset_field_name,      self.reader_packed_field_name,      self.reader_offset_field_name,
             self.reader_offset_field_name,      self.reader_last_offset_field_name, self.reader_offset_field_name,
-            self.reader_last_offset_field_name, self.reader_offset_field_name,      self.wire_const_full_name,
-            self.reader_offset_field_name,      self.reader_offset_field_name,
+            self.reader_last_offset_field_name, self.wire_const_full_name,          self.reader_offset_field_name,
+            self.reader_offset_field_name,
         });
     }
 };
@@ -354,6 +360,7 @@ test "basic repeatable enum field" {
         \\    if (tag.wire == gremlin.ProtoWireType.bytes) {
         \\        res._enum_field_packed = true;
         \\        const length_result = try buf.readVarInt(offset);
+        \\        res._enum_field_offset = offset + length_result.size;  // Point to the first value, not the length
         \\        res._enum_field_last_offset = offset + length_result.size + @as(usize, @intCast(length_result.value));
         \\        offset = res._enum_field_last_offset.?;
         \\    } else {
@@ -388,19 +395,23 @@ test "basic repeatable enum field" {
         \\        return @enumFromInt(value_result.value);
         \\    } else {
         \\        const value_result = try self.buf.readInt32(current_offset);
-        \\        const next_offset = current_offset + value_result.size;
+        \\        var next_offset = current_offset + value_result.size;
+        \\        const max_offset = self._enum_field_last_offset.?;
         \\
-        \\        if (next_offset >= self._enum_field_last_offset.? or !self.buf.hasNext(next_offset, 0)) {
-        \\            self._enum_field_offset = null;
-        \\        } else {
+        \\        // Search for the next occurrence of this field
+        \\        while (next_offset < max_offset and self.buf.hasNext(next_offset, 0)) {
         \\            const next_tag = try self.buf.readTagAt(next_offset);
+        \\            next_offset += next_tag.size;
+        \\
         \\            if (next_tag.number == TestWire.ENUM_FIELD_WIRE) {
-        \\                self._enum_field_offset = next_offset + next_tag.size;
+        \\                self._enum_field_offset = next_offset;
+        \\                return @enumFromInt(value_result.value);
         \\            } else {
-        \\                self._enum_field_offset = null;
+        \\                next_offset = try self.buf.skipData(next_offset, next_tag.wire);
         \\            }
         \\        }
         \\
+        \\        self._enum_field_offset = null;
         \\        return @enumFromInt(value_result.value);
         \\    }
         \\}

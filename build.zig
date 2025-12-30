@@ -34,9 +34,11 @@ pub fn build(b: *std.Build) void {
     {
         const parser_test = b.addTest(.{
             .name = "parser",
-            .root_source_file = b.path("src/parser/main.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/parser/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         const run_parser_tests = b.addRunArtifact(parser_test);
         test_step.dependOn(&run_parser_tests.step);
@@ -45,9 +47,11 @@ pub fn build(b: *std.Build) void {
     {
         const gremlin_test = b.addTest(.{
             .name = "wire",
-            .root_source_file = b.path("src/gremlin/main.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/gremlin/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         const run_gremiln_tests = b.addRunArtifact(gremlin_test);
         test_step.dependOn(&run_gremiln_tests.step);
@@ -56,16 +60,17 @@ pub fn build(b: *std.Build) void {
     {
         const codegen_test = b.addTest(.{
             .name = "codegen",
-            .root_source_file = b.path("step.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("step.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         const run_codegen_tests = b.addRunArtifact(codegen_test);
         test_step.dependOn(&run_codegen_tests.step);
     }
 
     {
-        // First create a step that will run both protobuf generations
         const proto_gen_step = b.step("proto-gen", "Generate protobuf files");
 
         const google_protobuf = ProtoGenStep.create(
@@ -90,12 +95,13 @@ pub fn build(b: *std.Build) void {
 
         const integration_test = b.addTest(.{
             .name = "integration",
-            .root_source_file = b.path("integration-test/main.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("integration-test/main.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
 
-        // Make the test module depend on proto generation
         integration_test.step.dependOn(proto_gen_step);
         integration_test.root_module.addImport("gremlin", gremlin);
 
