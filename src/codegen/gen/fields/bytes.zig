@@ -232,9 +232,9 @@ pub const ZigBytesField = struct {
     pub fn createReaderCase(self: *const ZigBytesField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
-            \\  const result = try buf.readBytes(offset);
-            \\  offset += result.size;
-            \\  res.{s} = result.value;
+            \\    const result = try buf.readBytes(offset);
+            \\    offset += result.size;
+            \\    res.{s} = result.value;
             \\}},
         , .{ self.wire_const_full_name, self.reader_field_name });
     }
@@ -242,9 +242,17 @@ pub const ZigBytesField = struct {
     /// Generate getter method for the field
     pub fn createReaderMethod(self: *const ZigBytesField) ![]const u8 {
         if (self.custom_default) |d| {
-            return std.fmt.allocPrint(self.allocator, "pub inline fn {s}(self: *const {s}) []const u8 {{ return self.{s} orelse {s}; }}", .{ self.reader_method_name, self.reader_struct_name, self.reader_field_name, d });
+            return std.fmt.allocPrint(self.allocator,
+                \\pub inline fn {s}(self: *const {s}) []const u8 {{
+                \\    return self.{s} orelse {s};
+                \\}}
+            , .{ self.reader_method_name, self.reader_struct_name, self.reader_field_name, d });
         } else {
-            return std.fmt.allocPrint(self.allocator, "pub inline fn {s}(self: *const {s}) []const u8 {{ return self.{s} orelse &[_]u8{{}}; }}", .{ self.reader_method_name, self.reader_struct_name, self.reader_field_name });
+            return std.fmt.allocPrint(self.allocator,
+                \\pub inline fn {s}(self: *const {s}) []const u8 {{
+                \\    return self.{s} orelse &[_]u8{{}};
+                \\}}
+            , .{ self.reader_method_name, self.reader_struct_name, self.reader_field_name });
         }
     }
 };
@@ -318,16 +326,20 @@ test "basic bytes field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.DATA_FIELD_WIRE => {
-        \\  const result = try buf.readBytes(offset);
-        \\  offset += result.size;
-        \\  res._data_field = result.value;
-        \\},
+        \\    const result = try buf.readBytes(offset);
+        \\    offset += result.size;
+        \\    res._data_field = result.value;
+        \\}
     , reader_case_code);
 
     // Test reader method
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getDataField(self: *const TestReader) []const u8 { return self._data_field orelse &[_]u8{}; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getDataField(self: *const TestReader) []const u8 {
+        \\    return self._data_field orelse &[_]u8{};
+        \\}
+    , reader_method_code);
 }
 
 test "bytes field with default" {
@@ -404,14 +416,18 @@ test "bytes field with default" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.DATA_FIELD_WIRE => {
-        \\  const result = try buf.readBytes(offset);
-        \\  offset += result.size;
-        \\  res._data_field = result.value;
-        \\},
+        \\    const result = try buf.readBytes(offset);
+        \\    offset += result.size;
+        \\    res._data_field = result.value;
+        \\}
     , reader_case_code);
 
     // Test reader method
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getDataField(self: *const TestReader) []const u8 { return self._data_field orelse \"\\x68\\x65\\x6C\\x6C\\x6F\"; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getDataField(self: *const TestReader) []const u8 {
+        \\    return self._data_field orelse "\x68\x65\x6C\x6C\x6F";
+        \\}
+    , reader_method_code);
 }

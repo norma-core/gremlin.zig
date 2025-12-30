@@ -68,6 +68,11 @@ pub const CodeGenerator = struct {
 
         self.out_file.depth += 1;
 
+        // Add blank line after struct opening
+        if (self.target.enums.items.len > 0 or self.target.structs.items.len > 0 or self.target.fields.items.len > 0) {
+            try self.out_file.linebreak();
+        }
+
         try self.generateNestedTypes();
         try self.generateFields();
         try self.generateSizeFunction();
@@ -153,7 +158,7 @@ pub const CodeGenerator = struct {
         const formatted = try std.fmt.allocPrint(self.allocator,
             \\pub fn init(src: []const u8) gremlin.Error!{s} {{
             \\    const buf = gremlin.Reader.init(src);
-            \\    return {s}{{.buf = buf}};
+            \\    return {s}{{ .buf = buf }};
             \\}}
         , .{ self.target.reader_name, self.target.reader_name });
         defer self.allocator.free(formatted);
@@ -174,7 +179,7 @@ pub const CodeGenerator = struct {
 
         const init_res = try std.fmt.allocPrint(
             self.allocator,
-            "    var res = {s}{{.buf = buf}};",
+            "    var res = {s}{{ .buf = buf }};",
             .{self.target.reader_name},
         );
         defer self.allocator.free(init_res);
@@ -202,7 +207,7 @@ pub const CodeGenerator = struct {
         try self.out_file.writeString(
             \\            else => {
             \\                offset = try buf.skipData(offset, tag.wire);
-            \\            }
+            \\            },
             \\        }
             \\    }
             \\    return res;
@@ -249,7 +254,9 @@ pub const CodeGenerator = struct {
         // Handle empty structs
         if (self.target.fields.items.len == 0) {
             const fmt = try std.fmt.allocPrint(self.allocator,
-                \\pub fn calcProtobufSize(_: *const {s}) usize {{ return 0; }}
+                \\pub fn calcProtobufSize(_: *const {s}) usize {{
+                \\    return 0;
+                \\}}
                 \\
             , .{self.target.writer_name});
             defer self.allocator.free(fmt);
@@ -304,8 +311,6 @@ pub const CodeGenerator = struct {
         defer self.allocator.free(encoder);
 
         try self.out_file.writeString(encoder);
-        try self.out_file.linebreak();
-
         try self.out_file.linebreak();
 
         // Handle empty structs

@@ -120,8 +120,7 @@ pub const ZigRepeatableScalarField = struct {
     pub fn createSizeCheck(self: *const ZigRepeatableScalarField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\if (self.{s}) |arr| {{
-            \\    if (arr.len == 0) {{
-            \\    }} else if (arr.len == 1) {{
+            \\    if (arr.len == 0) {{}} else if (arr.len == 1) {{
             \\        res += gremlin.sizes.sizeWireNumber({s}) + {s}(arr[0]);
             \\    }} else {{
             \\        var packed_size: usize = 0;
@@ -145,8 +144,7 @@ pub const ZigRepeatableScalarField = struct {
     pub fn createWriter(self: *const ZigRepeatableScalarField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\if (self.{s}) |arr| {{
-            \\    if (arr.len == 0) {{
-            \\    }} else if (arr.len == 1) {{
+            \\    if (arr.len == 0) {{}} else if (arr.len == 1) {{
             \\        target.{s}({s}, arr[0]);
             \\    }} else {{
             \\        var packed_size: usize = 0;
@@ -190,7 +188,7 @@ pub const ZigRepeatableScalarField = struct {
             \\    if (tag.wire == gremlin.ProtoWireType.bytes) {{
             \\        res.{s} = true;
             \\        const length_result = try buf.readVarInt(offset);
-            \\        res.{s} = offset + length_result.size;  // Point to the first value, not the length
+            \\        res.{s} = offset + length_result.size;
             \\        res.{s} = offset + length_result.size + @as(usize, @intCast(length_result.value));
             \\        offset = res.{s}.?;
             \\    }} else {{
@@ -308,8 +306,7 @@ test "basic repeatable scalar field" {
     defer std.testing.allocator.free(size_check_code);
     try std.testing.expectEqualStrings(
         \\if (self.number_field) |arr| {
-        \\    if (arr.len == 0) {
-        \\    } else if (arr.len == 1) {
+        \\    if (arr.len == 0) {} else if (arr.len == 1) {
         \\        res += gremlin.sizes.sizeWireNumber(TestWire.NUMBER_FIELD_WIRE) + gremlin.sizes.sizeI32(arr[0]);
         \\    } else {
         \\        var packed_size: usize = 0;
@@ -326,8 +323,7 @@ test "basic repeatable scalar field" {
     defer std.testing.allocator.free(writer_code);
     try std.testing.expectEqualStrings(
         \\if (self.number_field) |arr| {
-        \\    if (arr.len == 0) {
-        \\    } else if (arr.len == 1) {
+        \\    if (arr.len == 0) {} else if (arr.len == 1) {
         \\        target.appendInt32(TestWire.NUMBER_FIELD_WIRE, arr[0]);
         \\    } else {
         \\        var packed_size: usize = 0;
@@ -362,7 +358,7 @@ test "basic repeatable scalar field" {
         \\    if (tag.wire == gremlin.ProtoWireType.bytes) {
         \\        res._number_field_packed = true;
         \\        const length_result = try buf.readVarInt(offset);
-        \\        res._number_field_offset = offset + length_result.size;  // Point to the first value, not the length
+        \\        res._number_field_offset = offset + length_result.size;
         \\        res._number_field_last_offset = offset + length_result.size + @as(usize, @intCast(length_result.value));
         \\        offset = res._number_field_last_offset.?;
         \\    } else {
@@ -370,7 +366,7 @@ test "basic repeatable scalar field" {
         \\        offset += result.size;
         \\        res._number_field_last_offset = offset;
         \\    }
-        \\},
+        \\}
     , reader_case_code);
 
     // Test reader method

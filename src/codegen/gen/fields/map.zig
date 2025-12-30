@@ -173,14 +173,14 @@ pub const ZigMapField = struct {
         if (std.mem.eql(u8, self.key_type, "string") or std.mem.eql(u8, self.key_type, "bytes")) {
             return self.allocator.dupe(u8,
                 \\const sized_key = try entry_buf.readBytes(entry_offset);
-                \\                      key = sized_key.value;
-                \\                      entry_offset += sized_key.size;
+                \\                    key = sized_key.value;
+                \\                    entry_offset += sized_key.size;
             );
         } else {
             return std.fmt.allocPrint(self.allocator,
                 \\const sized_key = try entry_buf.{s}(entry_offset);
-                \\                      key = sized_key.value;
-                \\                      entry_offset += sized_key.size;
+                \\                    key = sized_key.value;
+                \\                    entry_offset += sized_key.size;
             , .{scalarReader(self.key_type)});
         }
     }
@@ -222,26 +222,26 @@ pub const ZigMapField = struct {
         if (self.value_type.is_bytes) {
             return self.allocator.dupe(u8,
                 \\const sized_value = try entry_buf.readBytes(entry_offset);
-                \\                      value = sized_value.value;
-                \\                      entry_offset += sized_value.size;
+                \\                    value = sized_value.value;
+                \\                    entry_offset += sized_value.size;
             );
         } else if (self.value_type.is_scalar) {
             return std.fmt.allocPrint(self.allocator,
                 \\const sized_value = try entry_buf.{s}(entry_offset);
-                \\                      value = sized_value.value;
-                \\                      entry_offset += sized_value.size;
+                \\                    value = sized_value.value;
+                \\                    entry_offset += sized_value.size;
             , .{scalarReader(self.value_type.src)});
         } else if (self.value_type.isEnum()) {
             return self.allocator.dupe(u8,
                 \\const sized_value = try entry_buf.readInt32(entry_offset);
-                \\                      value = @enumFromInt(sized_value.value);
-                \\                      entry_offset += sized_value.size;
+                \\                    value = @enumFromInt(sized_value.value);
+                \\                    entry_offset += sized_value.size;
             );
         } else {
             return std.fmt.allocPrint(self.allocator,
                 \\const sized_value = try entry_buf.readBytes(entry_offset);
-                \\                      value = try {s}.init(sized_value.value);
-                \\                      entry_offset += sized_value.size;
+                \\                    value = try {s}.init(sized_value.value);
+                \\                    entry_offset += sized_value.size;
             , .{self.resolved_reader_message_type.?});
         }
     }
@@ -483,7 +483,7 @@ pub const ZigMapField = struct {
             \\                }},
             \\                else => {{
             \\                    entry_offset = try entry_buf.skipData(entry_offset, entry_tag.wire);
-            \\                }}
+            \\                }},
             \\            }}
             \\        }}
             \\

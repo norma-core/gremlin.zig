@@ -275,14 +275,22 @@ pub const ZigScalarField = struct {
     /// Only includes field in output if value differs from default.
     pub fn createSizeCheck(self: *const ZigScalarField) ![]const u8 {
         const default_value = if (self.custom_default) |d| d else self.type_default;
-        return std.fmt.allocPrint(self.allocator, "if (self.{s} != {s}) {{ res += gremlin.sizes.sizeWireNumber({s}) + {s}(self.{s}); }}", .{ self.writer_field_name, default_value, self.wire_const_full_name, self.sizeFunc_name, self.writer_field_name });
+        return std.fmt.allocPrint(self.allocator,
+            \\if (self.{s} != {s}) {{
+            \\    res += gremlin.sizes.sizeWireNumber({s}) + {s}(self.{s});
+            \\}}
+        , .{ self.writer_field_name, default_value, self.wire_const_full_name, self.sizeFunc_name, self.writer_field_name });
     }
 
     /// Generate serialization code.
     /// Only writes field if value differs from default.
     pub fn createWriter(self: *const ZigScalarField) ![]const u8 {
         const default_value = if (self.custom_default) |d| d else self.type_default;
-        return std.fmt.allocPrint(self.allocator, "if (self.{s} != {s}) {{ target.{s}({s}, self.{s}); }}", .{ self.writer_field_name, default_value, self.write_func_name, self.wire_const_full_name, self.writer_field_name });
+        return std.fmt.allocPrint(self.allocator,
+            \\if (self.{s} != {s}) {{
+            \\    target.{s}({s}, self.{s});
+            \\}}
+        , .{ self.writer_field_name, default_value, self.write_func_name, self.wire_const_full_name, self.writer_field_name });
     }
 
     /// Generate reader struct field declaration with appropriate default
@@ -297,9 +305,9 @@ pub const ZigScalarField = struct {
         return std.fmt.allocPrint(
             self.allocator,
             \\{s} => {{
-            \\  const result = try buf.{s}(offset);
-            \\  offset += result.size;
-            \\  res.{s} = result.value;
+            \\    const result = try buf.{s}(offset);
+            \\    offset += result.size;
+            \\    res.{s} = result.value;
             \\}},
         ,
             .{ self.wire_const_full_name, self.read_func_name, self.reader_field_name },
@@ -311,7 +319,10 @@ pub const ZigScalarField = struct {
     pub fn createReaderMethod(self: *const ZigScalarField) ![]const u8 {
         return std.fmt.allocPrint(
             self.allocator,
-            "pub inline fn {s}(self: *const {s}) {s} {{ return self.{s}; }}",
+            \\pub inline fn {s}(self: *const {s}) {s} {{
+            \\    return self.{s};
+            \\}}
+        ,
             .{
                 self.reader_method_name,
                 self.reader_struct_name,
@@ -360,11 +371,19 @@ test "basic field" {
 
     const size_check_code = try zig_field.createSizeCheck();
     defer std.testing.allocator.free(size_check_code);
-    try std.testing.expectEqualStrings("if (self.uint_field != 0) { res += gremlin.sizes.sizeWireNumber(TestWire.UINT_FIELD_WIRE) + gremlin.sizes.sizeU64(self.uint_field); }", size_check_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.uint_field != 0) {
+        \\    res += gremlin.sizes.sizeWireNumber(TestWire.UINT_FIELD_WIRE) + gremlin.sizes.sizeU64(self.uint_field);
+        \\}
+    , size_check_code);
 
     const writer_code = try zig_field.createWriter();
     defer std.testing.allocator.free(writer_code);
-    try std.testing.expectEqualStrings("if (self.uint_field != 0) { target.appendUint64(TestWire.UINT_FIELD_WIRE, self.uint_field); }", writer_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.uint_field != 0) {
+        \\    target.appendUint64(TestWire.UINT_FIELD_WIRE, self.uint_field);
+        \\}
+    , writer_code);
 
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
@@ -374,17 +393,21 @@ test "basic field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.UINT_FIELD_WIRE => {
-        \\  const result = try buf.readUInt64(offset);
-        \\  offset += result.size;
-        \\  res._uint_field = result.value;
-        \\},
+        \\    const result = try buf.readUInt64(offset);
+        \\    offset += result.size;
+        \\    res._uint_field = result.value;
+        \\}
     ,
         reader_case_code,
     );
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getUintField(self: *const TestReader) u64 { return self._uint_field; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getUintField(self: *const TestReader) u64 {
+        \\    return self._uint_field;
+        \\}
+    , reader_method_code);
 }
 
 test "default field" {
@@ -425,11 +448,19 @@ test "default field" {
 
     const size_check_code = try zig_field.createSizeCheck();
     defer std.testing.allocator.free(size_check_code);
-    try std.testing.expectEqualStrings("if (self.int_field != 42) { res += gremlin.sizes.sizeWireNumber(TestWire.INT_FIELD_WIRE) + gremlin.sizes.sizeI32(self.int_field); }", size_check_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.int_field != 42) {
+        \\    res += gremlin.sizes.sizeWireNumber(TestWire.INT_FIELD_WIRE) + gremlin.sizes.sizeI32(self.int_field);
+        \\}
+    , size_check_code);
 
     const writer_code = try zig_field.createWriter();
     defer std.testing.allocator.free(writer_code);
-    try std.testing.expectEqualStrings("if (self.int_field != 42) { target.appendInt32(TestWire.INT_FIELD_WIRE, self.int_field); }", writer_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.int_field != 42) {
+        \\    target.appendInt32(TestWire.INT_FIELD_WIRE, self.int_field);
+        \\}
+    , writer_code);
 
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
@@ -439,15 +470,19 @@ test "default field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.INT_FIELD_WIRE => {
-        \\  const result = try buf.readInt32(offset);
-        \\  offset += result.size;
-        \\  res._int_field = result.value;
-        \\},
+        \\    const result = try buf.readInt32(offset);
+        \\    offset += result.size;
+        \\    res._int_field = result.value;
+        \\}
     ,
         reader_case_code,
     );
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getIntField(self: *const TestReader) i32 { return self._int_field; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getIntField(self: *const TestReader) i32 {
+        \\    return self._int_field;
+        \\}
+    , reader_method_code);
 }

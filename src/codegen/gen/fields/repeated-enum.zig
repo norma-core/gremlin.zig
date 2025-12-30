@@ -123,8 +123,7 @@ pub const ZigRepeatableEnumField = struct {
     pub fn createSizeCheck(self: *const ZigRepeatableEnumField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\if (self.{s}) |arr| {{
-            \\    if (arr.len == 0) {{
-            \\    }} else if (arr.len == 1) {{
+            \\    if (arr.len == 0) {{}} else if (arr.len == 1) {{
             \\        res += gremlin.sizes.sizeWireNumber({s}) + gremlin.sizes.sizeI32(@intFromEnum(arr[0]));
             \\    }} else {{
             \\        var packed_size: usize = 0;
@@ -146,8 +145,7 @@ pub const ZigRepeatableEnumField = struct {
     pub fn createWriter(self: *const ZigRepeatableEnumField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\if (self.{s}) |arr| {{
-            \\    if (arr.len == 0) {{
-            \\    }} else if (arr.len == 1) {{
+            \\    if (arr.len == 0) {{}} else if (arr.len == 1) {{
             \\        target.appendInt32({s}, @intFromEnum(arr[0]));
             \\    }} else {{
             \\        var packed_size: usize = 0;
@@ -190,7 +188,7 @@ pub const ZigRepeatableEnumField = struct {
             \\    if (tag.wire == gremlin.ProtoWireType.bytes) {{
             \\        res.{s} = true;
             \\        const length_result = try buf.readVarInt(offset);
-            \\        res.{s} = offset + length_result.size;  // Point to the first value, not the length
+            \\        res.{s} = offset + length_result.size;
             \\        res.{s} = offset + length_result.size + @as(usize, @intCast(length_result.value));
             \\        offset = res.{s}.?;
             \\    }} else {{
@@ -306,8 +304,7 @@ test "basic repeatable enum field" {
     defer std.testing.allocator.free(size_check_code);
     try std.testing.expectEqualStrings(
         \\if (self.enum_field) |arr| {
-        \\    if (arr.len == 0) {
-        \\    } else if (arr.len == 1) {
+        \\    if (arr.len == 0) {} else if (arr.len == 1) {
         \\        res += gremlin.sizes.sizeWireNumber(TestWire.ENUM_FIELD_WIRE) + gremlin.sizes.sizeI32(@intFromEnum(arr[0]));
         \\    } else {
         \\        var packed_size: usize = 0;
@@ -324,8 +321,7 @@ test "basic repeatable enum field" {
     defer std.testing.allocator.free(writer_code);
     try std.testing.expectEqualStrings(
         \\if (self.enum_field) |arr| {
-        \\    if (arr.len == 0) {
-        \\    } else if (arr.len == 1) {
+        \\    if (arr.len == 0) {} else if (arr.len == 1) {
         \\        target.appendInt32(TestWire.ENUM_FIELD_WIRE, @intFromEnum(arr[0]));
         \\    } else {
         \\        var packed_size: usize = 0;
@@ -360,7 +356,7 @@ test "basic repeatable enum field" {
         \\    if (tag.wire == gremlin.ProtoWireType.bytes) {
         \\        res._enum_field_packed = true;
         \\        const length_result = try buf.readVarInt(offset);
-        \\        res._enum_field_offset = offset + length_result.size;  // Point to the first value, not the length
+        \\        res._enum_field_offset = offset + length_result.size;
         \\        res._enum_field_last_offset = offset + length_result.size + @as(usize, @intCast(length_result.value));
         \\        offset = res._enum_field_last_offset.?;
         \\    } else {
@@ -368,7 +364,7 @@ test "basic repeatable enum field" {
         \\        offset += result.size;
         \\        res._enum_field_last_offset = offset;
         \\    }
-        \\},
+        \\}
     , reader_case_code);
 
     // Test reader method

@@ -164,9 +164,9 @@ pub const ZigMessageField = struct {
     pub fn createReaderCase(self: *const ZigMessageField) ![]const u8 {
         return std.fmt.allocPrint(self.allocator,
             \\{s} => {{
-            \\  const result = try buf.readBytes(offset);
-            \\  offset += result.size;
-            \\  res.{s} = result.value;
+            \\    const result = try buf.readBytes(offset);
+            \\    offset += result.size;
+            \\    res.{s} = result.value;
             \\}},
         , .{ self.wire_const_full_name, self.reader_field_name });
     }
@@ -259,10 +259,10 @@ test "basic message field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.MESSAGE_FIELD_WIRE => {
-        \\  const result = try buf.readBytes(offset);
-        \\  offset += result.size;
-        \\  res._message_field_buf = result.value;
-        \\},
+        \\    const result = try buf.readBytes(offset);
+        \\    offset += result.size;
+        \\    res._message_field_buf = result.value;
+        \\}
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();

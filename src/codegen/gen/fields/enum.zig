@@ -142,10 +142,18 @@ pub const ZigEnumField = struct {
             // When default value exists, only include size if value differs from default
             const full_default = try std.mem.concat(self.allocator, u8, &[_][]const u8{ self.resolvedEnum.?, ".", d });
             defer self.allocator.free(full_default);
-            return std.fmt.allocPrint(self.allocator, "if (self.{s} != {s}) {{ res += gremlin.sizes.sizeWireNumber({s}) + gremlin.sizes.sizeI32(@intFromEnum(self.{s})); }}", .{ self.writer_field_name, full_default, self.wire_const_full_name, self.writer_field_name });
+            return std.fmt.allocPrint(self.allocator,
+                \\if (self.{s} != {s}) {{
+                \\    res += gremlin.sizes.sizeWireNumber({s}) + gremlin.sizes.sizeI32(@intFromEnum(self.{s}));
+                \\}}
+            , .{ self.writer_field_name, full_default, self.wire_const_full_name, self.writer_field_name });
         } else {
             // Without default, include size if value is not 0
-            return std.fmt.allocPrint(self.allocator, "if (@intFromEnum(self.{s}) != 0) {{ res += gremlin.sizes.sizeWireNumber({s}) + gremlin.sizes.sizeI32(@intFromEnum(self.{s})); }}", .{ self.writer_field_name, self.wire_const_full_name, self.writer_field_name });
+            return std.fmt.allocPrint(self.allocator,
+                \\if (@intFromEnum(self.{s}) != 0) {{
+                \\    res += gremlin.sizes.sizeWireNumber({s}) + gremlin.sizes.sizeI32(@intFromEnum(self.{s}));
+                \\}}
+            , .{ self.writer_field_name, self.wire_const_full_name, self.writer_field_name });
         }
     }
 
@@ -155,10 +163,18 @@ pub const ZigEnumField = struct {
             // Write value only if it differs from default
             const full_default = try std.mem.concat(self.allocator, u8, &[_][]const u8{ self.resolvedEnum.?, ".", d });
             defer self.allocator.free(full_default);
-            return std.fmt.allocPrint(self.allocator, "if (self.{s} != {s}) {{ target.appendInt32({s}, @intFromEnum(self.{s})); }}", .{ self.writer_field_name, full_default, self.wire_const_full_name, self.writer_field_name });
+            return std.fmt.allocPrint(self.allocator,
+                \\if (self.{s} != {s}) {{
+                \\    target.appendInt32({s}, @intFromEnum(self.{s}));
+                \\}}
+            , .{ self.writer_field_name, full_default, self.wire_const_full_name, self.writer_field_name });
         } else {
             // Write value only if it's not 0
-            return std.fmt.allocPrint(self.allocator, "if (@intFromEnum(self.{s}) != 0) {{ target.appendInt32({s}, @intFromEnum(self.{s})); }}", .{ self.writer_field_name, self.wire_const_full_name, self.writer_field_name });
+            return std.fmt.allocPrint(self.allocator,
+                \\if (@intFromEnum(self.{s}) != 0) {{
+                \\    target.appendInt32({s}, @intFromEnum(self.{s}));
+                \\}}
+            , .{ self.writer_field_name, self.wire_const_full_name, self.writer_field_name });
         }
     }
 
@@ -178,9 +194,9 @@ pub const ZigEnumField = struct {
         return std.fmt.allocPrint(
             self.allocator,
             \\{s} => {{
-            \\  const result = try buf.readInt32(offset);
-            \\  offset += result.size;
-            \\  res.{s} = @enumFromInt(result.value);
+            \\    const result = try buf.readInt32(offset);
+            \\    offset += result.size;
+            \\    res.{s} = @enumFromInt(result.value);
             \\}},
         ,
             .{ self.wire_const_full_name, self.reader_field_name },
@@ -191,7 +207,10 @@ pub const ZigEnumField = struct {
     pub fn createReaderMethod(self: *const ZigEnumField) ![]const u8 {
         return std.fmt.allocPrint(
             self.allocator,
-            "pub inline fn {s}(self: *const {s}) {s} {{ return self.{s}; }}",
+            \\pub inline fn {s}(self: *const {s}) {s} {{
+            \\    return self.{s};
+            \\}}
+        ,
             .{ self.reader_method_name, self.reader_struct_name, self.resolvedEnum.?, self.reader_field_name },
         );
     }
@@ -235,11 +254,19 @@ test "basic enum field" {
 
     const size_check_code = try zig_field.createSizeCheck();
     defer std.testing.allocator.free(size_check_code);
-    try std.testing.expectEqualStrings("if (@intFromEnum(self.enum_field) != 0) { res += gremlin.sizes.sizeWireNumber(TestWire.ENUM_FIELD_WIRE) + gremlin.sizes.sizeI32(@intFromEnum(self.enum_field)); }", size_check_code);
+    try std.testing.expectEqualStrings(
+        \\if (@intFromEnum(self.enum_field) != 0) {
+        \\    res += gremlin.sizes.sizeWireNumber(TestWire.ENUM_FIELD_WIRE) + gremlin.sizes.sizeI32(@intFromEnum(self.enum_field));
+        \\}
+    , size_check_code);
 
     const writer_code = try zig_field.createWriter();
     defer std.testing.allocator.free(writer_code);
-    try std.testing.expectEqualStrings("if (@intFromEnum(self.enum_field) != 0) { target.appendInt32(TestWire.ENUM_FIELD_WIRE, @intFromEnum(self.enum_field)); }", writer_code);
+    try std.testing.expectEqualStrings(
+        \\if (@intFromEnum(self.enum_field) != 0) {
+        \\    target.appendInt32(TestWire.ENUM_FIELD_WIRE, @intFromEnum(self.enum_field));
+        \\}
+    , writer_code);
 
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
@@ -249,15 +276,19 @@ test "basic enum field" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.ENUM_FIELD_WIRE => {
-        \\  const result = try buf.readInt32(offset);
-        \\  offset += result.size;
-        \\  res._enum_field = @enumFromInt(result.value);
-        \\},
+        \\    const result = try buf.readInt32(offset);
+        \\    offset += result.size;
+        \\    res._enum_field = @enumFromInt(result.value);
+        \\}
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getEnumField(self: *const TestReader) messages.TestEnum { return self._enum_field; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getEnumField(self: *const TestReader) messages.TestEnum {
+        \\    return self._enum_field;
+        \\}
+    , reader_method_code);
 }
 
 test "enum field with default" {
@@ -298,11 +329,19 @@ test "enum field with default" {
 
     const size_check_code = try zig_field.createSizeCheck();
     defer std.testing.allocator.free(size_check_code);
-    try std.testing.expectEqualStrings("if (self.enum_field != messages.TestEnum.OTHER) { res += gremlin.sizes.sizeWireNumber(TestWire.ENUM_FIELD_WIRE) + gremlin.sizes.sizeI32(@intFromEnum(self.enum_field)); }", size_check_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.enum_field != messages.TestEnum.OTHER) {
+        \\    res += gremlin.sizes.sizeWireNumber(TestWire.ENUM_FIELD_WIRE) + gremlin.sizes.sizeI32(@intFromEnum(self.enum_field));
+        \\}
+    , size_check_code);
 
     const writer_code = try zig_field.createWriter();
     defer std.testing.allocator.free(writer_code);
-    try std.testing.expectEqualStrings("if (self.enum_field != messages.TestEnum.OTHER) { target.appendInt32(TestWire.ENUM_FIELD_WIRE, @intFromEnum(self.enum_field)); }", writer_code);
+    try std.testing.expectEqualStrings(
+        \\if (self.enum_field != messages.TestEnum.OTHER) {
+        \\    target.appendInt32(TestWire.ENUM_FIELD_WIRE, @intFromEnum(self.enum_field));
+        \\}
+    , writer_code);
 
     const reader_field_code = try zig_field.createReaderStructField();
     defer std.testing.allocator.free(reader_field_code);
@@ -312,13 +351,17 @@ test "enum field with default" {
     defer std.testing.allocator.free(reader_case_code);
     try std.testing.expectEqualStrings(
         \\TestWire.ENUM_FIELD_WIRE => {
-        \\  const result = try buf.readInt32(offset);
-        \\  offset += result.size;
-        \\  res._enum_field = @enumFromInt(result.value);
-        \\},
+        \\    const result = try buf.readInt32(offset);
+        \\    offset += result.size;
+        \\    res._enum_field = @enumFromInt(result.value);
+        \\}
     , reader_case_code);
 
     const reader_method_code = try zig_field.createReaderMethod();
     defer std.testing.allocator.free(reader_method_code);
-    try std.testing.expectEqualStrings("pub inline fn getEnumField(self: *const TestReader) messages.TestEnum { return self._enum_field; }", reader_method_code);
+    try std.testing.expectEqualStrings(
+        \\pub inline fn getEnumField(self: *const TestReader) messages.TestEnum {
+        \\    return self._enum_field;
+        \\}
+    , reader_method_code);
 }

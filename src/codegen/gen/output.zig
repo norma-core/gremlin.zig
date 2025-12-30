@@ -88,6 +88,7 @@ pub const FileOutput = struct {
 
     /// Writes all accumulated content to file and closes it.
     /// Creates the necessary directory structure before writing.
+    /// Collapses consecutive newlines into single newlines.
     ///
     /// Returns: Error if file operations fail
     pub fn close(self: *FileOutput) !void {
@@ -102,8 +103,38 @@ pub const FileOutput = struct {
         });
         defer file.close();
 
-        // Write all content at once
-        try file.writeAll(self.content.items);
+        // Collapse consecutive newlines into single newlines
+        var processed = try std.ArrayList(u8).initCapacity(self.allocator, self.content.items.len);
+        defer processed.deinit(self.allocator);
+
+        var prev_was_newline = false;
+        for (self.content.items) |char| {
+            if (char == '\n') {
+                if (!prev_was_newline) {
+                    try processed.append(self.allocator, char);
+                    prev_was_newline = true;
+                }
+            } else {
+                try processed.append(self.allocator, char);
+                prev_was_newline = false;
+            }
+        }
+
+        // Trim trailing newlines and ensure exactly one
+        var trimmed_len = processed.items.len;
+
+        // Find the last non-newline character
+        while (trimmed_len > 0 and processed.items[trimmed_len - 1] == '\n') {
+            trimmed_len -= 1;
+        }
+
+        // Write content up to the last non-newline character
+        if (trimmed_len > 0) {
+            try file.writeAll(processed.items[0..trimmed_len]);
+        }
+
+        // Always add exactly one newline at the end
+        try file.writeAll("\n");
 
         // Free the content buffer
         self.content.deinit(self.allocator);
@@ -169,7 +200,10 @@ pub const FileOutput = struct {
         var line_iterator = std.mem.splitSequence(u8, content, "\n");
 
         while (line_iterator.next()) |line| {
-            try self.content.appendSlice(self.allocator, prefix);
+            // Only add prefix if line is not empty
+            if (line.len > 0) {
+                try self.content.appendSlice(self.allocator, prefix);
+            }
             try self.content.appendSlice(self.allocator, line);
             try self.content.append(self.allocator, '\n');
         }
