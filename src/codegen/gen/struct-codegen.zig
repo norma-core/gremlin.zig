@@ -160,7 +160,7 @@ pub const CodeGenerator = struct {
             \\    const buf = gremlin.Reader.init(src);
             \\    return {s}{{ .buf = buf }};
             \\}}
-        , .{ self.target.reader_name, self.target.reader_name });
+        , .{ self.target.full_reader_name, self.target.full_reader_name });
         defer self.allocator.free(formatted);
         try self.out_file.writeString(formatted);
     }
@@ -170,7 +170,7 @@ pub const CodeGenerator = struct {
         const init_sig = try std.fmt.allocPrint(
             self.allocator,
             "pub fn init(src: []const u8) gremlin.Error!{s} {{",
-            .{self.target.reader_name},
+            .{self.target.full_reader_name},
         );
         defer self.allocator.free(init_sig);
         try self.out_file.writeString(init_sig);
@@ -180,7 +180,7 @@ pub const CodeGenerator = struct {
         const init_res = try std.fmt.allocPrint(
             self.allocator,
             "    var res = {s}{{ .buf = buf }};",
-            .{self.target.reader_name},
+            .{self.target.full_reader_name},
         );
         defer self.allocator.free(init_res);
         try self.out_file.writeString(init_res);
@@ -258,7 +258,7 @@ pub const CodeGenerator = struct {
                 \\    return 0;
                 \\}}
                 \\
-            , .{self.target.writer_name});
+            , .{self.target.full_writer_name});
             defer self.allocator.free(fmt);
 
             try self.out_file.writeString(fmt);
@@ -269,7 +269,7 @@ pub const CodeGenerator = struct {
         const fmt = try std.fmt.allocPrint(self.allocator,
             \\pub fn calcProtobufSize(self: *const {s}) usize {{
             \\    var res: usize = 0;
-        , .{self.target.writer_name});
+        , .{self.target.full_writer_name});
         defer self.allocator.free(fmt);
 
         try self.out_file.writeString(fmt);
@@ -306,7 +306,7 @@ pub const CodeGenerator = struct {
             \\    return buf;
             \\}}
         ,
-            .{self.target.writer_name},
+            .{self.target.full_writer_name},
         );
         defer self.allocator.free(encoder);
 
@@ -318,7 +318,7 @@ pub const CodeGenerator = struct {
             const empty_encode = try std.fmt.allocPrint(self.allocator,
                 \\pub fn encodeTo(_: *const {s}, _: *gremlin.Writer) void {{}}
                 \\
-            , .{self.target.writer_name});
+            , .{self.target.full_writer_name});
             defer self.allocator.free(empty_encode);
 
             try self.out_file.writeString(empty_encode);
@@ -328,7 +328,7 @@ pub const CodeGenerator = struct {
         // Generate encodeTo function for writing to provided buffer
         const encode_to = try std.fmt.allocPrint(self.allocator,
             \\pub fn encodeTo(self: *const {s}, target: *gremlin.Writer) void {{
-        , .{self.target.writer_name});
+        , .{self.target.full_writer_name});
         defer self.allocator.free(encode_to);
         try self.out_file.writeString(encode_to);
 

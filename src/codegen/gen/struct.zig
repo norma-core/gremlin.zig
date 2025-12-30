@@ -63,7 +63,7 @@ pub const ZigStruct = struct {
             names,
         );
 
-        var fields_result = try FieldsBuilder.build(allocator, src, names_result.full_writer_name, names_result.full_wire_name, names_result.writer_name, names_result.reader_name);
+        var fields_result = try FieldsBuilder.build(allocator, src, names_result.full_writer_name, names_result.full_wire_name, names_result.full_writer_name, names_result.full_reader_name);
         errdefer fields_result.deinit();
 
         var scope_names = try std.ArrayList([]const u8).initCapacity(allocator, 32);
@@ -233,18 +233,21 @@ const NameGenerator = struct {
     const FullNames = struct { wire: []const u8, writer: []const u8, reader: []const u8 };
 
     fn generateFullNames(allocator: std.mem.Allocator, scope: []const u8, const_name: []const u8, wire_name: []const u8) !FullNames {
+        const reader_name = try std.mem.concat(allocator, u8, &.{ const_name, "Reader" });
+        defer allocator.free(reader_name);
+
         if (scope.len == 0) {
             return FullNames{
                 .wire = try allocator.dupe(u8, wire_name),
                 .writer = try allocator.dupe(u8, const_name),
-                .reader = try allocator.dupe(u8, const_name),
+                .reader = try allocator.dupe(u8, reader_name),
             };
         }
 
         return FullNames{
             .wire = try std.mem.concat(allocator, u8, &.{ scope, ".", wire_name }),
             .writer = try std.mem.concat(allocator, u8, &.{ scope, ".", const_name }),
-            .reader = try std.mem.concat(allocator, u8, &.{ scope, ".", const_name }),
+            .reader = try std.mem.concat(allocator, u8, &.{ scope, ".", reader_name }),
         };
     }
 };

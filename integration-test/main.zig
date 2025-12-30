@@ -4,6 +4,7 @@ const unittest = @import("gen/google/unittest.proto.zig");
 const unittest_import = @import("gen/google/unittest_import.proto.zig");
 const unittest_import_public = @import("gen/google/unittest_import_public.proto.zig");
 const map_test = @import("gen/google/map_test.proto.zig");
+const ambg_ref = @import("gen/ambg_ref/whatsapp.proto.zig");
 const gremlin = @import("gremlin");
 const Writer = gremlin.Writer;
 const Reader = gremlin.Reader;
@@ -953,4 +954,15 @@ test "repeated types - marshal and parse" {
         }
         try std.testing.expectEqual(msg.repeated_cord.?.len, count);
     }
+}
+
+test "ambigious ref" {
+    const acc = ambg_ref.Account{
+        .is_username_deleted = true,
+    };
+
+    const allocator = std.testing.allocator;
+
+    const buf = try acc.encode(allocator);
+    defer allocator.free(buf);
 }

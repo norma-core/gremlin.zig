@@ -93,6 +93,16 @@ pub fn build(b: *std.Build) void {
         );
         proto_gen_step.dependOn(&gogofast_protobuf.step);
 
+        const ambg_ref_protobuf = ProtoGenStep.create(
+            b,
+            .{
+                .name = "test_data/ambg_ref protobuf",
+                .proto_sources = b.path("test_data/ambg_ref"),
+                .target = b.path("integration-test/gen/ambg_ref"),
+            },
+        );
+        proto_gen_step.dependOn(&ambg_ref_protobuf.step);
+
         const integration_test = b.addTest(.{
             .name = "integration",
             .root_module = b.createModule(.{
