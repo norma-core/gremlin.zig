@@ -117,5 +117,36 @@ pub fn build(b: *std.Build) void {
 
         const run_integration = b.addRunArtifact(integration_test);
         test_step.dependOn(&run_integration.step);
+
+        // Add benchmark binary
+        const benchmark_step = b.step("benchmark", "Build serialization benchmark");
+
+        const benchmark_exe = b.addExecutable(.{
+            .name = "serialization-benchmark",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("integration-test/benchmark.zig"),
+                .target = target,
+                .optimize = .ReleaseFast, // Use ReleaseFast for benchmarks
+            }),
+        });
+
+        benchmark_exe.step.dependOn(proto_gen_step);
+        benchmark_exe.root_module.addImport("gremlin", gremlin);
+
+        const install_benchmark = b.addInstallArtifact(benchmark_exe, .{});
+        benchmark_step.dependOn(&install_benchmark.step);
+
+        // Add a run step for the benchmark
+        const run_benchmark = b.addRunArtifact(benchmark_exe);
+        run_benchmark.step.dependOn(&install_benchmark.step);
+
+        if (b.args) |args| {
+            run_benchmark.addArgs(args);
+        } else {
+            run_benchmark.addArg("1000"); // Default to 1000 iterations
+        }
+
+        const run_benchmark_step = b.step("run-benchmark", "Run serialization benchmark");
+        run_benchmark_step.dependOn(&run_benchmark.step);
     }
 }

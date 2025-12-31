@@ -72,6 +72,26 @@ pub fn build(b: *std.Build) void {
 - Zero-allocation readers with lazy parsing - parses only required complex fields
 - Tested with Zig 0.15.2
 
+## Performance
+
+Benchmark results on a typical message (491 bytes average size):
+
+```
+Serialization Benchmark Results:
+================================
+Iterations: 100,000,000
+Average message size: 491 bytes
+
+Average times per operation:
+  calcProtobufSize: 13.477 ns (0.013 µs)
+  encodeTo:         25.450 ns (0.025 µs)
+  Total:            38.927 ns (0.039 µs)
+```
+
+This translates to:
+- **~25.7 million** messages serialized per second
+- **~12.6 GB/s** throughput for serialization on MacBook Pro M3 Max
+
 ## Generated code
 
 See the complete working example in the [`example`](./example) folder.
