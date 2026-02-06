@@ -2,6 +2,8 @@
 
 A zero-dependency, zero-allocation Google Protocol Buffers implementation in pure Zig (no protoc required)
 
+Part of [NormaCore](https://github.com/norma-core/norma-core/) project.
+
 **[⚡ See Performance Benchmarks](#performance)** - 2x-5.7x faster than our Go implementation
 
 ## Installation & Setup
