@@ -116,6 +116,12 @@ Deep nested message benchmarks (1409 bytes, 4+ levels deep) comparing gremlin.zi
 | 🎯 **Lazy Read** | 1,078 ns/op | 264 ns/op | **4.1x** |
 | 🔍 **Deep Access** | 3,924 ns/op | 688 ns/op | **5.7x** |
 
+**Memory Efficiency:**
+- Marshal: **1 allocation** (vs 1 allocation in gremlin_go)
+- Unmarshal: **0 allocations** (vs 9 allocations in gremlin_go)
+- Lazy Read: **0 allocations** (vs 9 allocations in gremlin_go)
+- Deep Access: **0 allocations** (vs 29 allocations in gremlin_go)
+
 *Benchmarks run with `--release=fast` with 10,000,000 iterations. Run `zig build run-benchmark -- 10000000` to reproduce.*
 
 ## Generated code
