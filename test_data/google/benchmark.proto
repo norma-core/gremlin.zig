@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package benchmark;
+
+option go_package = "github.com/norma-core/norma-core/shared/gremlin_go/bench/google_pb";
+
+// Deep nested message structure to test lazy parsing and allocation efficiency
+message Level4 {
+  int32 value = 1;
+  string data = 2;
+  repeated int32 numbers = 3;
+}
+
+message Level3 {
+  int32 id = 1;
+  string name = 2;
+  Level4 nested = 3;
+  repeated Level4 items = 4;
+}
+
+message Level2 {
+  int32 id = 1;
+  string description = 2;
+  Level3 nested = 3;
+  repeated Level3 items = 4;
+  bytes payload = 5;
+}
+
+message Level1 {
+  int32 id = 1;
+  string title = 2;
+  Level2 nested = 3;
+  repeated Level2 items = 4;
+  double score = 5;
+}
+
+message DeepNested {
+  int32 root_id = 1;
+  string root_name = 2;
+  Level1 nested = 3;
+  repeated Level1 items = 4;
+  bool active = 5;
+  repeated string tags = 6;
+}
+
+// Simple flat message for comparison
+message FlatMessage {
+  int32 id = 1;
+  string name = 2;
+  int32 value = 3;
+  double score = 4;
+  repeated int32 numbers = 5;
+  repeated string tags = 6;
+}

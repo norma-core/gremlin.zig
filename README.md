@@ -2,6 +2,8 @@
 
 A zero-dependency, zero-allocation Google Protocol Buffers implementation in pure Zig (no protoc required)
 
+**[⚡ See Performance Benchmarks](#performance)** - 2x-5.7x faster than our Go implementation
+
 ## Installation & Setup
 
 Single command setup:
@@ -74,23 +76,47 @@ pub fn build(b: *std.Build) void {
 
 ## Performance
 
-Benchmark results on a typical message (491 bytes average size):
+### Benchmark: gremlin.zig vs gremlin_go
 
-```
-Serialization Benchmark Results:
-================================
-Iterations: 100,000,000
-Average message size: 491 bytes
+Deep nested message benchmarks (1409 bytes, 4+ levels deep) comparing gremlin.zig against [gremlin_go](https://github.com/norma-core/norma-core/tree/main/shared/gremlin_go) across multiple platforms with 10 million iterations:
 
-Average times per operation:
-  calcProtobufSize: 13.477 ns (0.013 µs)
-  encodeTo:         25.450 ns (0.025 µs)
-  Total:            38.927 ns (0.039 µs)
-```
+**🍎 Apple M3 Max** (16 cores, 10M iterations):
 
-This translates to:
-- **~25.7 million** messages serialized per second
-- **~12.6 GB/s** throughput for serialization on MacBook Pro M3 Max
+| Operation | gremlin_go | gremlin.zig ⚡ | Speedup |
+|-----------|------------|----------------|---------|
+| 🔨 **Marshal** | 1,749 ns/op | 891 ns/op | **2.0x** |
+| ⚡ **Unmarshal** | 253 ns/op | 112 ns/op | **2.3x** |
+| 🎯 **Lazy Read** | 269 ns/op | 112 ns/op | **2.4x** |
+| 🔍 **Deep Access** | 833 ns/op | 266 ns/op | **3.1x** |
+
+**😈 FreeBSD** - AMD Ryzen 5 7600X (12 cores, 10M iterations):
+
+| Operation | gremlin_go | gremlin.zig ⚡ | Speedup |
+|-----------|------------|----------------|---------|
+| 🔨 **Marshal** | 1,554 ns/op | 649 ns/op | **2.4x** |
+| ⚡ **Unmarshal** | 234 ns/op | 66 ns/op | **3.5x** |
+| 🎯 **Lazy Read** | 254 ns/op | 66 ns/op | **3.8x** |
+| 🔍 **Deep Access** | 776 ns/op | 180 ns/op | **4.3x** |
+
+**💻 Framework 16 with Ubuntu** - AMD Ryzen AI 9 HX 370 (24 cores, 10M iterations):
+
+| Operation | gremlin_go | gremlin.zig ⚡ | Speedup |
+|-----------|------------|----------------|---------|
+| 🔨 **Marshal** | 1,436 ns/op | 558 ns/op | **2.6x** |
+| ⚡ **Unmarshal** | 207 ns/op | 45 ns/op | **4.6x** |
+| 🎯 **Lazy Read** | 229 ns/op | 45 ns/op | **5.1x** |
+| 🔍 **Deep Access** | 692 ns/op | 156 ns/op | **4.4x** |
+
+**🥧 Raspberry Pi 5** - Gentoo Linux (ARM64, 4 cores, 10M iterations):
+
+| Operation | gremlin_go | gremlin.zig ⚡ | Speedup |
+|-----------|------------|----------------|---------|
+| 🔨 **Marshal** | 6,520 ns/op | 2,225 ns/op | **2.9x** |
+| ⚡ **Unmarshal** | 1,080 ns/op | 264 ns/op | **4.1x** |
+| 🎯 **Lazy Read** | 1,078 ns/op | 264 ns/op | **4.1x** |
+| 🔍 **Deep Access** | 3,924 ns/op | 688 ns/op | **5.7x** |
+
+*Benchmarks run with `--release=fast` with 10,000,000 iterations. Run `zig build run-benchmark -- 10000000` to reproduce.*
 
 ## Generated code
 
