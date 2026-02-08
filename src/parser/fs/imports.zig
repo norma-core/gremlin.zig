@@ -94,9 +94,20 @@ const ImportResolver = struct {
         if (self.files_map.get(target_path)) |target| {
             import_item.target = target;
         } else {
+            // Check if this is a well-known Google protobuf type import
+            // These are optional - if not found, we skip without error
+            if (isWellKnownGoogleImport(import_item.path)) {
+                // Import is optional, leave target as null
+                return;
+            }
+
             std.debug.print("cannot resolve import {s} from {s} with root {s}\n", .{ import_item.path, file_path, self.base_path });
             return ResolveError.TargetFileNotFound;
         }
+    }
+
+    fn isWellKnownGoogleImport(path: []const u8) bool {
+        return std.mem.startsWith(u8, path, "google/protobuf/");
     }
 
     fn resolvePublicImports(self: *ImportResolver) !void {
