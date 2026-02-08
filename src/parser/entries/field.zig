@@ -417,4 +417,18 @@ test "field parsing" {
         try std.testing.expectEqualStrings("foo", f.name);
         try std.testing.expectEqual(2, f.fields.items.len);
     }
+
+    // Test field with message literal option
+    {
+        var buf = ParserBuffer.init("int32 content_node_id = 1 [features = { field_presence: EXPLICIT }];");
+        var f = try NormalField.parse(std.testing.allocator, scope, &buf);
+        defer f.deinit();
+
+        try std.testing.expectEqualStrings("int32", f.f_type.src);
+        try std.testing.expectEqualStrings("content_node_id", f.f_name);
+        try std.testing.expectEqual(1, f.index);
+        try std.testing.expectEqual(1, f.options.?.items.len);
+        try std.testing.expectEqualStrings("features", f.options.?.items[0].name);
+        try std.testing.expectEqualStrings("{ field_presence: EXPLICIT }", f.options.?.items[0].value);
+    }
 }
