@@ -238,9 +238,10 @@ fn resolveMessageExtend(file: *ProtoFile, message: *Message) Error!void {
                 ext.base.full,
             });
             for (file.imports.items) |*imp| {
-                std.debug.print("    - {s} (resolved: {s})\n", .{
+                std.debug.print("    - {s} (resolved: {s}, messages: {d})\n", .{
                     imp.path,
                     if (imp.target != null) "yes" else "no",
+                    if (imp.target) |t| t.messages.items.len else 0,
                 });
             }
             std.debug.print("\n", .{});
