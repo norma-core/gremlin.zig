@@ -333,6 +333,25 @@ fn resolveType(file: *ProtoFile, ftype: *FieldType) Error!void {
     if (try resolveLocalType(file, ftype)) return;
     if (try resolveExternalType(file, ftype)) return;
 
+    std.debug.print(
+        \\
+        \\TypeNotFound in file: {s}
+        \\  type: {s}
+        \\  scope: {s}
+        \\  resolved imports:
+        \\
+    , .{
+        file.path orelse "<unknown>",
+        if (ftype.name) |n| n.full else "<no name>",
+        ftype.scope.full,
+    });
+    for (file.imports.items) |*imp| {
+        std.debug.print("    - {s} (resolved: {s})\n", .{
+            imp.path,
+            if (imp.target != null) "yes" else "no",
+        });
+    }
+    std.debug.print("\n", .{});
     return Error.TypeNotFound;
 }
 
