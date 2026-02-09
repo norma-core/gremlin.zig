@@ -2,6 +2,8 @@
 
 A zero-dependency, zero-allocation Google Protocol Buffers implementation in pure Zig (no protoc required)
 
+[![X (Twitter)](https://img.shields.io/badge/X-@batsuev__es-black?logo=x)](https://x.com/batsuev_es) [![X (Twitter)](https://img.shields.io/badge/X-@norma__core__dev-black?logo=x)](https://x.com/norma_core_dev)
+
 Part of [NormaCore](https://github.com/norma-core/norma-core/) project.
 
 **[⚡ See Performance Benchmarks](#performance)** - 2x-5.7x faster than our Go implementation
@@ -45,6 +47,11 @@ pub fn build(b: *std.Build) void {
             .name = "protobuf",                  // Name for the build step
             .proto_sources = b.path("proto"),    // Directory containing .proto files
             .target = b.path("src/gen"),         // Output directory for generated Zig code
+            .ignore_masks = &[_][]const u8{      // Optional: patterns to ignore
+                "vendor/*",
+                "*/node_modules/*",
+                ".git/*",
+            },
         },
     );
 
@@ -125,6 +132,33 @@ Deep nested message benchmarks (1409 bytes, 4+ levels deep) comparing gremlin.zi
 - Deep Access: **0 allocations** (vs 29 allocations in gremlin_go)
 
 *Benchmarks run with `--release=fast` with 10,000,000 iterations. Run `zig build run-benchmark -- 10000000` to reproduce.*
+
+## Ignore Patterns
+
+The `ignore_masks` option allows you to exclude directories from proto file discovery using glob patterns with `*` wildcards:
+
+```zig
+const protobuf = ProtoGenStep.create(
+    b,
+    .{
+        .name = "protobuf",
+        .proto_sources = b.path("proto"),
+        .target = b.path("src/gen"),
+        .ignore_masks = &[_][]const u8{
+            "vendor/*",           // Ignore vendor directory
+            "*/node_modules/*",   // Ignore node_modules anywhere
+            ".git/*",             // Ignore .git directory
+            "*_test/*",           // Ignore test directories
+        },
+    },
+);
+```
+
+Pattern matching:
+- `vendor/*` matches `vendor/any/path`
+- `*/vendor/*` matches `any/vendor/path`
+- `*suffix` matches anything ending with "suffix"
+- `prefix*` matches anything starting with "prefix"
 
 ## Generated code
 

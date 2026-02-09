@@ -15,12 +15,12 @@ edition = "2023";
 
 package protobuf_test_messages.editions.proto3;
 
-import "protobuf/any.proto";
-import "protobuf/duration.proto";
-import "protobuf/field_mask.proto";
-import "protobuf/struct.proto";
-import "protobuf/timestamp.proto";
-import "protobuf/wrappers.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 option features.field_presence = IMPLICIT;
 option java_package = "com.google.protobuf_test_messages.editions.proto3";

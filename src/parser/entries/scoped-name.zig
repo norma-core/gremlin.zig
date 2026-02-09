@@ -174,6 +174,16 @@ pub const ScopedName = struct {
         if (target.full[0] == '.' and std.mem.eql(u8, self.full, target.full[1..])) {
             return true;
         }
+
+        // Match simple name against qualified name's last component
+        // e.g., "TrackEvent" matches ".perfetto.protos.TrackEvent"
+        if (self.parent == null and std.mem.eql(u8, self.name, target.name)) {
+            return true;
+        }
+        if (target.parent == null and std.mem.eql(u8, self.name, target.name)) {
+            return true;
+        }
+
         return false;
     }
 

@@ -16,6 +16,8 @@
 const std = @import("std");
 const ProtoFile = @import("../entries/file.zig").ProtoFile;
 const import = @import("../entries/import.zig");
+const ParserBuffer = @import("../entries/buffer.zig").ParserBuffer;
+const well_known_types = @import("../well_known_types.zig");
 
 pub const ResolveError = error{
     TargetFileNotFound,
@@ -44,19 +46,51 @@ const ImportResolver = struct {
             .files_map = std.StringHashMap(*ProtoFile).init(allocator),
         };
 
-        // Build lookup map of files by path
-        for (files.items) |*file| {
+        try self.rebuildFilesMap();
+        return self;
+    }
+
+    fn rebuildFilesMap(self: *ImportResolver) !void {
+        self.files_map.clearRetainingCapacity();
+        for (self.files.items) |*file| {
             if (file.path) |path| {
                 try self.files_map.put(path, file);
             }
         }
-
-        return self;
     }
 
     fn deinit(self: *ImportResolver) void {
         self.files_map.deinit();
         self.allocator.destroy(self);
+    }
+
+    /// First pass: collect and parse all needed well-known types before resolving
+    fn collectWellKnownTypes(self: *ImportResolver) !void {
+        // Collect unique well-known import paths
+        var needed = std.StringHashMap(void).init(self.allocator);
+        defer needed.deinit();
+
+        for (self.files.items) |*file| {
+            for (file.imports.items) |*import_item| {
+                if (well_known_types.isWellKnownImport(import_item.path)) {
+                    try needed.put(import_item.path, {});
+                }
+            }
+        }
+
+        // Parse and add all needed well-known types
+        var iter = needed.keyIterator();
+        while (iter.next()) |path| {
+            if (well_known_types.get(path.*)) |content| {
+                var buffer = ParserBuffer.init(content);
+                var proto_file = ProtoFile.parse(self.allocator, &buffer) catch continue;
+                proto_file.path = try self.allocator.dupe(u8, path.*);
+                try self.files.append(self.allocator, proto_file);
+            }
+        }
+
+        // Rebuild the map now that all files are added
+        try self.rebuildFilesMap();
     }
 
     fn resolveTargetFiles(self: *ImportResolver) ResolveError!void {
@@ -67,10 +101,6 @@ const ImportResolver = struct {
 
     fn resolveFileImports(self: *ImportResolver, file: *ProtoFile) ResolveError!void {
         const file_path = file.path orelse return;
-
-        // Get relative path from base to file
-        const rel_path = try std.fs.path.relative(self.allocator, self.base_path, file_path);
-        defer self.allocator.free(rel_path);
 
         // Resolve each import
         for (file.imports.items) |*import_item| {
@@ -83,7 +113,15 @@ const ImportResolver = struct {
         file_path: []const u8,
         import_item: *import.Import,
     ) ResolveError!void {
-        // Build full target path
+        // For well-known types, the path is the key directly
+        if (well_known_types.isWellKnownImport(import_item.path)) {
+            if (self.files_map.get(import_item.path)) |target| {
+                import_item.target = target;
+                return;
+            }
+        }
+
+        // Build full target path for regular imports
         const target_path = try std.fs.path.join(self.allocator, &[_][]const u8{
             self.base_path,
             import_item.path,
@@ -140,6 +178,10 @@ pub fn resolveImports(
     var resolver = try ImportResolver.init(allocator, base, files);
     defer resolver.deinit();
 
+    // First: parse and add all needed well-known types
+    try resolver.collectWellKnownTypes();
+
+    // Then: resolve all imports (safe now, no more appends to files)
     try resolver.resolveTargetFiles();
     try resolver.resolvePublicImports();
 }

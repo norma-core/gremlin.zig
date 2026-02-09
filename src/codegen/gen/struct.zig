@@ -365,6 +365,12 @@ const FieldsBuilder = struct {
 const TypeResolver = struct {
     pub fn resolveEnum(file: *const ZigFile, target_type: FieldType) !?[]const u8 {
         if (target_type.ref_local_enum) |local_enum| {
+            // If scope_ref is set and different from current file, look in that file via imports
+            if (target_type.scope_ref) |scope_file| {
+                if (scope_file != file.file) {
+                    return try file.findImportedEnumName(scope_file, local_enum);
+                }
+            }
             return try file.findEnumName(local_enum);
         } else if (target_type.ref_external_enum) |external_enum| {
             return try file.findImportedEnumName(target_type.ref_import.?, external_enum);
@@ -374,6 +380,12 @@ const TypeResolver = struct {
 
     pub fn resolveMessage(file: *const ZigFile, target_type: FieldType) !?[]const u8 {
         if (target_type.ref_local_message) |local_message| {
+            // If scope_ref is set and different from current file, look in that file via imports
+            if (target_type.scope_ref) |scope_file| {
+                if (scope_file != file.file) {
+                    return try file.findImportedMessageName(scope_file, local_message);
+                }
+            }
             return try file.findMessageName(local_message);
         } else if (target_type.ref_external_message) |external_message| {
             return try file.findImportedMessageName(target_type.ref_import.?, external_message);

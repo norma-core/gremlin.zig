@@ -231,13 +231,77 @@ pub fn constant(buf: *ParserBuffer) Error![]const u8 {
         if (res.len > 0) return buf.buf[start_offset..buf.offset];
     } else |_| {}
 
-    // Try parsing as string
+    // Try parsing as string (supports concatenated strings like "a" "b")
     if (strLit(buf)) |_| {
+        // Check for additional concatenated string literals
+        while (true) {
+            try buf.skipSpaces();
+            const next = try buf.char() orelse break;
+            if (next != '"' and next != '\'') break;
+            _ = strLit(buf) catch break;
+        }
         return buf.buf[start_offset..buf.offset];
     } else |_| {}
     buf.offset = start_offset;
 
+    // Try parsing as message literal
+    if (try buf.char() == '{') {
+        return try msgLit(buf);
+    }
+
     return Error.InvalidConst;
+}
+
+/// Parse a message literal value
+/// Format: { field1: value1, field2: value2 }
+fn msgLit(buf: *ParserBuffer) Error![]const u8 {
+    const start_offset = buf.offset;
+    try buf.skipSpaces();
+
+    if (try buf.char() != '{') {
+        return Error.InvalidConst;
+    }
+    buf.offset += 1;
+
+    try buf.skipSpaces();
+
+    // Handle empty message literal
+    if (try buf.char() == '}') {
+        buf.offset += 1;
+        return buf.buf[start_offset..buf.offset];
+    }
+
+    // Parse field: value pairs
+    while (true) {
+        try buf.skipSpaces();
+
+        // Parse field name
+        _ = try ident(buf);
+
+        try buf.skipSpaces();
+        if (try buf.char() != ':') {
+            return Error.InvalidConst;
+        }
+        buf.offset += 1;
+
+        try buf.skipSpaces();
+
+        // Parse value (recursive for nested message literals)
+        _ = try constant(buf);
+
+        try buf.skipSpaces();
+        const c = try buf.char() orelse return Error.UnexpectedEOF;
+
+        if (c == ',') {
+            buf.offset += 1;
+            continue;
+        } else if (c == '}') {
+            buf.offset += 1;
+            return buf.buf[start_offset..buf.offset];
+        } else {
+            return Error.InvalidConst;
+        }
+    }
 }
 
 fn decimals(buf: *ParserBuffer) Error!void {
@@ -525,4 +589,43 @@ test "trigraph const" {
     var buf = ParserBuffer.init("\"? \\? ?? \\?? \\??? ??/ ?\\?-\"");
     const c = try constant(&buf);
     try std.testing.expectEqualStrings("\"? \\? ?? \\?? \\??? ??/ ?\\?-\"", c);
+}
+
+test "concatenated string literals" {
+    // Test concatenated string literals (like go_package options)
+    var buf = ParserBuffer.init("\"string1\" \"string2\"");
+    const c = try constant(&buf);
+    try std.testing.expectEqualStrings("\"string1\" \"string2\"", c);
+
+    // Test concatenated strings with different quotes
+    buf = ParserBuffer.init("\"part1\" 'part2'");
+    const c2 = try constant(&buf);
+    try std.testing.expectEqualStrings("\"part1\" 'part2'", c2);
+
+    // Test single string still works
+    buf = ParserBuffer.init("\"single\"");
+    const c3 = try constant(&buf);
+    try std.testing.expectEqualStrings("\"single\"", c3);
+}
+
+test "message literal option" {
+    // Test simple message literal
+    var buf = ParserBuffer.init("{ field_presence: EXPLICIT }");
+    const c = try constant(&buf);
+    try std.testing.expectEqualStrings("{ field_presence: EXPLICIT }", c);
+
+    // Test message literal with multiple fields
+    buf = ParserBuffer.init("{ field1: value1, field2: value2 }");
+    const c2 = try constant(&buf);
+    try std.testing.expectEqualStrings("{ field1: value1, field2: value2 }", c2);
+
+    // Test nested message literal
+    buf = ParserBuffer.init("{ outer: { inner: value } }");
+    const c3 = try constant(&buf);
+    try std.testing.expectEqualStrings("{ outer: { inner: value } }", c3);
+
+    // Test empty message literal
+    buf = ParserBuffer.init("{}");
+    const c4 = try constant(&buf);
+    try std.testing.expectEqualStrings("{}", c4);
 }

@@ -112,8 +112,7 @@ fn findExtendInMessage(message: *Message, name: ScopedName) ?*Message {
 fn findExtendMessage(file: *ProtoFile, name: ScopedName) ?*Message {
     for (file.messages.items) |*msg| {
         if (findExtendInMessage(msg, name)) |res| {
-            // Only return if message hasn't been extended yet
-            if (res.extends.items.len == 0) return res;
+            return res;
         }
     }
     return null;
@@ -208,9 +207,8 @@ fn copyExtendedFields(message: *Message, target: ExtendBase) Error!void {
 
         if (!oneof_exists) {
             const new_oneof = try source_oneof.clone();
-            for (source_oneof.fields.items) |field| {
-                var new_field = try field.clone();
-                new_field.f_type.scope_ref = target.file;
+            for (new_oneof.fields.items) |*field| {
+                field.f_type.scope_ref = target.file;
             }
             try message.oneofs.append(message.allocator, new_oneof);
         }

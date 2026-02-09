@@ -98,6 +98,10 @@ pub const ImportCollector = struct {
             if (field.f_type.ref_import) |ref_import| {
                 try self.addImport(ref_import);
             }
+            // Also collect from scope_ref (for extended fields)
+            if (field.f_type.scope_ref) |scope_ref| {
+                try self.addImport(scope_ref);
+            }
         }
     }
 
@@ -108,6 +112,10 @@ pub const ImportCollector = struct {
                 if (field.f_type.ref_import) |ref_import| {
                     try self.addImport(ref_import);
                 }
+                // Also collect from scope_ref (for extended fields)
+                if (field.f_type.scope_ref) |scope_ref| {
+                    try self.addImport(scope_ref);
+                }
             }
         }
     }
@@ -117,6 +125,10 @@ pub const ImportCollector = struct {
         for (msg.maps.items) |*map| {
             if (map.value_type.ref_import) |ref_import| {
                 try self.addImport(ref_import);
+            }
+            // Also collect from scope_ref (for extended fields)
+            if (map.value_type.scope_ref) |scope_ref| {
+                try self.addImport(scope_ref);
             }
         }
     }

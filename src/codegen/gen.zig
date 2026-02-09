@@ -24,6 +24,7 @@ const ProtoFile = gremlin_parser.ProtoFile;
 const paths = @import("gen/paths.zig");
 const FileOutput = @import("gen/output.zig").FileOutput;
 const ZigFile = @import("gen/file.zig").ZigFile;
+const well_known_types = @import("../parser/well_known_types.zig");
 
 /// GeneratorError enumerates possible errors that can occur during code generation
 pub const GeneratorError = error{
@@ -57,8 +58,14 @@ fn createFile(
     target_root: []const u8,
     project_root: []const u8,
 ) !ZigFile {
-    // Get path relative to proto root
-    const rel_to_proto = try std.fs.path.relativePosix(allocator, proto_root, file.path.?);
+    const file_path = file.path.?;
+
+    // For well-known types, the path is already relative (e.g., "google/protobuf/any.proto")
+    // For regular files, compute relative path from proto_root
+    const rel_to_proto = if (well_known_types.isWellKnownImport(file_path))
+        try allocator.dupe(u8, file_path)
+    else
+        try std.fs.path.relativePosix(allocator, proto_root, file_path);
     defer allocator.free(rel_to_proto);
 
     // Generate output path
@@ -98,9 +105,9 @@ pub fn generateProtobuf(
     proto_root: []const u8,
     target_root: []const u8,
     project_root: []const u8,
+    ignore_masks: ?[]const []const u8,
 ) !void {
-    // Parse all proto files
-    var parsed = try gremlin_parser.parse(allocator, proto_root);
+    var parsed = try gremlin_parser.parse(allocator, proto_root, ignore_masks);
     defer parsed.deinit();
 
     // Create ZigFile instances

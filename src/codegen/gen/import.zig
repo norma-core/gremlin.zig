@@ -23,6 +23,7 @@ const naming = @import("./fields/naming.zig");
 const Import = @import("../../parser/main.zig").Import;
 const ProtoFile = @import("../../parser/main.zig").ProtoFile;
 const ZigFile = @import("./file.zig").ZigFile;
+const well_known_types = @import("../../parser/well_known_types.zig");
 
 /// Represents a Zig import statement, handling both system imports (std, gremlin)
 /// and imports from other proto files.
@@ -126,8 +127,12 @@ pub fn importResolve(
     file_path: []const u8,
     names: *std.ArrayList([]const u8),
 ) !ZigImport {
-    // Get the path relative to proto_root
-    const rel_to_proto = try std.fs.path.relativePosix(allocator, proto_root, import_path);
+    // For well-known types, the import_path is already relative (e.g., "google/protobuf/any.proto")
+    // For regular files, compute relative path from proto_root
+    const rel_to_proto = if (well_known_types.isWellKnownImport(import_path))
+        try allocator.dupe(u8, import_path)
+    else
+        try std.fs.path.relativePosix(allocator, proto_root, import_path);
     defer allocator.free(rel_to_proto);
 
     // Generate output path in target directory
