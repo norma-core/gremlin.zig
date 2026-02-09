@@ -207,9 +207,8 @@ fn copyExtendedFields(message: *Message, target: ExtendBase) Error!void {
 
         if (!oneof_exists) {
             const new_oneof = try source_oneof.clone();
-            for (source_oneof.fields.items) |field| {
-                var new_field = try field.clone();
-                new_field.f_type.scope_ref = target.file;
+            for (new_oneof.fields.items) |*field| {
+                field.f_type.scope_ref = target.file;
             }
             try message.oneofs.append(message.allocator, new_oneof);
         }
