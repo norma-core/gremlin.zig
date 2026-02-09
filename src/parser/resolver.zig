@@ -112,8 +112,7 @@ fn findExtendInMessage(message: *Message, name: ScopedName) ?*Message {
 fn findExtendMessage(file: *ProtoFile, name: ScopedName) ?*Message {
     for (file.messages.items) |*msg| {
         if (findExtendInMessage(msg, name)) |res| {
-            // Only return if message hasn't been extended yet
-            if (res.extends.items.len == 0) return res;
+            return res;
         }
     }
     return null;
