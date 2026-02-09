@@ -110,11 +110,14 @@ fn findExtendInMessage(message: *Message, name: ScopedName) ?*Message {
 
 /// Find a message that can be extended within a proto file
 fn findExtendMessage(file: *ProtoFile, name: ScopedName) ?*Message {
+    std.debug.print("    searching for '{s}' in messages: ", .{name.full});
     for (file.messages.items) |*msg| {
+        std.debug.print("'{s}' ", .{msg.name.full});
         if (findExtendInMessage(msg, name)) |res| {
             return res;
         }
     }
+    std.debug.print("\n", .{});
     return null;
 }
 
