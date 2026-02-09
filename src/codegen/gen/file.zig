@@ -198,27 +198,6 @@ pub const ZigFile = struct {
                 }
             }
         }
-        std.debug.print(
-            \\
-            \\EnumNotFound in codegen:
-            \\  current file: {s}
-            \\  looking for enum in file: {s}
-            \\  enum name: {s}
-            \\  imports available:
-            \\
-        , .{
-            self.file.path orelse "<unknown>",
-            target_file.path orelse "<unknown>",
-            target_enum.name.full,
-        });
-        for (self.imports.items) |*import_ref| {
-            if (import_ref.is_system) continue;
-            std.debug.print("    - {s} -> {s}\n", .{
-                import_ref.path,
-                if (import_ref.target) |t| (t.file.path orelse "<unknown>") else "<not resolved>",
-            });
-        }
-        std.debug.print("\n", .{});
         return ZigFileError.EnumNotFound;
     }
 
