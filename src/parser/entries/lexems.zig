@@ -231,8 +231,15 @@ pub fn constant(buf: *ParserBuffer) Error![]const u8 {
         if (res.len > 0) return buf.buf[start_offset..buf.offset];
     } else |_| {}
 
-    // Try parsing as string
+    // Try parsing as string (supports concatenated strings like "a" "b")
     if (strLit(buf)) |_| {
+        // Check for additional concatenated string literals
+        while (true) {
+            try buf.skipSpaces();
+            const next = try buf.char() orelse break;
+            if (next != '"' and next != '\'') break;
+            _ = strLit(buf) catch break;
+        }
         return buf.buf[start_offset..buf.offset];
     } else |_| {}
     buf.offset = start_offset;
@@ -582,6 +589,23 @@ test "trigraph const" {
     var buf = ParserBuffer.init("\"? \\? ?? \\?? \\??? ??/ ?\\?-\"");
     const c = try constant(&buf);
     try std.testing.expectEqualStrings("\"? \\? ?? \\?? \\??? ??/ ?\\?-\"", c);
+}
+
+test "concatenated string literals" {
+    // Test concatenated string literals (like go_package options)
+    var buf = ParserBuffer.init("\"string1\" \"string2\"");
+    const c = try constant(&buf);
+    try std.testing.expectEqualStrings("\"string1\" \"string2\"", c);
+
+    // Test concatenated strings with different quotes
+    buf = ParserBuffer.init("\"part1\" 'part2'");
+    const c2 = try constant(&buf);
+    try std.testing.expectEqualStrings("\"part1\" 'part2'", c2);
+
+    // Test single string still works
+    buf = ParserBuffer.init("\"single\"");
+    const c3 = try constant(&buf);
+    try std.testing.expectEqualStrings("\"single\"", c3);
 }
 
 test "message literal option" {

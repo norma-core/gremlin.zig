@@ -224,3 +224,12 @@ test "message literal option" {
     try std.testing.expectEqualStrings("features", opts.items[0].name);
     try std.testing.expectEqualStrings("{ field_presence: EXPLICIT }", opts.items[0].value);
 }
+
+test "concatenated string option" {
+    // Test go_package style concatenated string literals
+    var buf = ParserBuffer.init("option go_package = \"github.com/foo/\" \"bar_proto\";");
+
+    const opt = try Option.parse(&buf) orelse unreachable;
+    try std.testing.expectEqualStrings("go_package", opt.name);
+    try std.testing.expectEqualStrings("\"github.com/foo/\" \"bar_proto\"", opt.value);
+}
