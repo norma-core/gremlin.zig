@@ -110,14 +110,11 @@ fn findExtendInMessage(message: *Message, name: ScopedName) ?*Message {
 
 /// Find a message that can be extended within a proto file
 fn findExtendMessage(file: *ProtoFile, name: ScopedName) ?*Message {
-    std.debug.print("    searching for '{s}' in messages: ", .{name.full});
     for (file.messages.items) |*msg| {
-        std.debug.print("'{s}' ", .{msg.name.full});
         if (findExtendInMessage(msg, name)) |res| {
             return res;
         }
     }
-    std.debug.print("\n", .{});
     return null;
 }
 
@@ -241,10 +238,9 @@ fn resolveMessageExtend(file: *ProtoFile, message: *Message) Error!void {
                 ext.base.full,
             });
             for (file.imports.items) |*imp| {
-                std.debug.print("    - {s} (resolved: {s}, messages: {d})\n", .{
+                std.debug.print("    - {s} (resolved: {s})\n", .{
                     imp.path,
                     if (imp.target != null) "yes" else "no",
-                    if (imp.target) |t| t.messages.items.len else 0,
                 });
             }
             std.debug.print("\n", .{});
