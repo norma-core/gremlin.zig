@@ -333,19 +333,22 @@ fn resolveType(file: *ProtoFile, ftype: *FieldType) Error!void {
     if (try resolveLocalType(file, ftype)) return;
     if (try resolveExternalType(file, ftype)) return;
 
+    const scope_file: *ProtoFile = if (ftype.scope_ref) |f| f else file;
     std.debug.print(
         \\
         \\TypeNotFound in file: {s}
         \\  type: {s}
         \\  scope: {s}
-        \\  resolved imports:
+        \\  scope_ref file: {s}
+        \\  imports of scope_ref file:
         \\
     , .{
         file.path orelse "<unknown>",
         if (ftype.name) |n| n.full else "<no name>",
         ftype.scope.full,
+        scope_file.path orelse "<unknown>",
     });
-    for (file.imports.items) |*imp| {
+    for (scope_file.imports.items) |*imp| {
         std.debug.print("    - {s} (resolved: {s})\n", .{
             imp.path,
             if (imp.target != null) "yes" else "no",
