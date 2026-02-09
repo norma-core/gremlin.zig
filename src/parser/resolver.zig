@@ -226,6 +226,25 @@ fn resolveMessageExtend(file: *ProtoFile, message: *Message) Error!void {
         if (target) |t| {
             try copyExtendedFields(message, t);
         } else {
+            std.debug.print(
+                \\
+                \\ExtendSourceNotFound in file: {s}
+                \\  message: {s}
+                \\  extend target: {s}
+                \\  resolved imports:
+                \\
+            , .{
+                file.path orelse "<unknown>",
+                message.name.full,
+                ext.base.full,
+            });
+            for (file.imports.items) |*imp| {
+                std.debug.print("    - {s} (resolved: {s})\n", .{
+                    imp.path,
+                    if (imp.target != null) "yes" else "no",
+                });
+            }
+            std.debug.print("\n", .{});
             return Error.ExtendSourceNotFound;
         }
     }
