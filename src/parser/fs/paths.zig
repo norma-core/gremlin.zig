@@ -15,10 +15,44 @@
 
 const std = @import("std");
 
-/// Finds all .proto files recursively starting from the given base path
-/// Returns an ArrayList containing the absolute paths to all found .proto files
-/// Caller owns the returned ArrayList and must call deinit() on it
-pub fn findProtoFiles(allocator: std.mem.Allocator, basePath: []const u8) !std.ArrayList([]const u8) {
+fn matchesAnyMask(path: []const u8, masks: ?[]const []const u8) bool {
+    const masks_slice = masks orelse return false;
+    for (masks_slice) |mask| {
+        if (matchGlob(path, mask)) return true;
+    }
+    return false;
+}
+
+fn matchGlob(path: []const u8, pattern: []const u8) bool {
+    var path_idx: usize = 0;
+    var pattern_idx: usize = 0;
+
+    while (pattern_idx < pattern.len and path_idx < path.len) {
+        if (pattern[pattern_idx] == '*') {
+            if (pattern_idx + 1 >= pattern.len) return true;
+
+            pattern_idx += 1;
+            while (path_idx < path.len) {
+                if (matchGlob(path[path_idx..], pattern[pattern_idx..])) return true;
+                path_idx += 1;
+            }
+            return false;
+        } else if (pattern[pattern_idx] == path[path_idx]) {
+            pattern_idx += 1;
+            path_idx += 1;
+        } else {
+            return false;
+        }
+    }
+
+    while (pattern_idx < pattern.len and pattern[pattern_idx] == '*') {
+        pattern_idx += 1;
+    }
+
+    return pattern_idx == pattern.len and path_idx == path.len;
+}
+
+pub fn findProtoFiles(allocator: std.mem.Allocator, basePath: []const u8, ignore_masks: ?[]const []const u8) !std.ArrayList([]const u8) {
     var dir = try std.fs.cwd().openDir(basePath, .{ .iterate = true });
     defer dir.close();
 
@@ -33,8 +67,9 @@ pub fn findProtoFiles(allocator: std.mem.Allocator, basePath: []const u8) !std.A
         paths.deinit(allocator);
     }
 
-    // Walk through all files and directories recursively
     while (try walker.next()) |entry| {
+        if (matchesAnyMask(entry.path, ignore_masks)) continue;
+
         if (entry.kind == .file and std.mem.eql(u8, std.fs.path.extension(entry.basename), ".proto")) {
             const path = try dir.realpathAlloc(allocator, entry.path);
             try paths.append(allocator, path);
@@ -144,7 +179,7 @@ test "walk" {
     var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
     const path = try std.fs.realpath(".", &path_buffer);
 
-    var entries = try findProtoFiles(std.testing.allocator, path);
+    var entries = try findProtoFiles(std.testing.allocator, path, null);
     defer {
         for (entries.items) |entry| {
             std.testing.allocator.free(entry);
@@ -170,4 +205,30 @@ test "find root" {
     defer std.testing.allocator.free(root);
 
     try std.testing.expectEqualStrings("/a/b", root);
+}
+
+test "matchGlob" {
+    try std.testing.expect(matchGlob("vendor", "vendor"));
+    try std.testing.expect(matchGlob("vendor/proto", "vendor/*"));
+    try std.testing.expect(matchGlob("src/vendor/proto", "*/vendor/*"));
+    try std.testing.expect(matchGlob("any/path/vendor/deep", "*/vendor/*"));
+    try std.testing.expect(matchGlob("node_modules", "node_modules"));
+    try std.testing.expect(matchGlob("prefix_suffix", "prefix*"));
+    try std.testing.expect(matchGlob("prefix_suffix", "*suffix"));
+    try std.testing.expect(matchGlob("prefix_middle_suffix", "prefix*suffix"));
+
+    try std.testing.expect(!matchGlob("vendors", "vendor"));
+    try std.testing.expect(!matchGlob("other/path", "vendor/*"));
+    try std.testing.expect(!matchGlob("src/other/proto", "*/vendor/*"));
+}
+
+test "matchesAnyMask" {
+    const masks = [_][]const u8{ "vendor/*", "*/node_modules/*", ".git/*" };
+
+    try std.testing.expect(matchesAnyMask("vendor/proto", &masks));
+    try std.testing.expect(matchesAnyMask("src/node_modules/lib", &masks));
+    try std.testing.expect(matchesAnyMask(".git/hooks", &masks));
+
+    try std.testing.expect(!matchesAnyMask("src/proto", &masks));
+    try std.testing.expect(!matchesAnyMask("lib/code.proto", &masks));
 }

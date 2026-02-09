@@ -98,9 +98,9 @@ pub fn generateProtobuf(
     proto_root: []const u8,
     target_root: []const u8,
     project_root: []const u8,
+    ignore_masks: ?[]const []const u8,
 ) !void {
-    // Parse all proto files
-    var parsed = try gremlin_parser.parse(allocator, proto_root);
+    var parsed = try gremlin_parser.parse(allocator, proto_root, ignore_masks);
     defer parsed.deinit();
 
     // Create ZigFile instances

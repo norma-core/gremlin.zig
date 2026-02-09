@@ -22,11 +22,13 @@ const ProtoGenStep = @This();
 step: std.Build.Step,
 proto_sources: std.Build.LazyPath,
 gen_output: std.Build.LazyPath,
+ignore_masks: ?[]const []const u8,
 
 pub const ProtoGenConfig = struct {
     name: []const u8 = "protobuf",
     proto_sources: std.Build.LazyPath,
     target: std.Build.LazyPath,
+    ignore_masks: ?[]const []const u8 = null,
 };
 
 pub fn create(
@@ -43,6 +45,7 @@ pub fn create(
         }),
         .proto_sources = config.proto_sources,
         .gen_output = config.target,
+        .ignore_masks = config.ignore_masks,
     };
     return step;
 }
@@ -63,6 +66,7 @@ fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         proto_path_resolved,
         target_path,
         build_path,
+        ps.ignore_masks,
     ) catch |err| {
         std.log.err("failed to generate protobuf code: {s}", .{@errorName(err)});
         return err;

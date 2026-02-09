@@ -97,9 +97,8 @@ fn printError(allocator: std.mem.Allocator, path: []const u8, err: Error, buf: *
 /// Parse protocol buffer files starting from the given base path
 /// Returns a ParseResult containing all parsed files and their buffers
 /// Caller owns the returned ParseResult and must call deinit() on it
-pub fn parse(allocator: std.mem.Allocator, base_path: []const u8) !ParseResult {
-    // Find all .proto files and their common root
-    var proto_files = try paths.findProtoFiles(allocator, base_path);
+pub fn parse(allocator: std.mem.Allocator, base_path: []const u8, ignore_masks: ?[]const []const u8) !ParseResult {
+    var proto_files = try paths.findProtoFiles(allocator, base_path, ignore_masks);
     defer {
         for (proto_files.items) |file| {
             allocator.free(file);
