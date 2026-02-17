@@ -65,7 +65,8 @@ fn createFile(
     const rel_to_proto = if (well_known_types.isWellKnownImport(file_path))
         try allocator.dupe(u8, file_path)
     else
-        try std.fs.path.relativePosix(allocator, proto_root, file_path);
+        // TODO(jae): Test this change of having to add "cwd"
+        try std.fs.path.relativePosix(allocator, ".", proto_root, file_path);
     defer allocator.free(rel_to_proto);
 
     // Generate output path
@@ -101,13 +102,14 @@ fn createFile(
 /// Error: GeneratorError variants for different failure modes
 ///        OutOfMemory if allocation fails
 pub fn generateProtobuf(
+    io: std.Io,
     allocator: std.mem.Allocator,
     proto_root: []const u8,
     target_root: []const u8,
     project_root: []const u8,
     ignore_masks: ?[]const []const u8,
 ) !void {
-    var parsed = try gremlin_parser.parse(allocator, proto_root, ignore_masks);
+    var parsed = try gremlin_parser.parse(io, allocator, proto_root, ignore_masks);
     defer parsed.deinit();
 
     // Create ZigFile instances
@@ -134,7 +136,7 @@ pub fn generateProtobuf(
     try resolveReferences(&files);
 
     // Generate code for each file
-    try generateCode(allocator, &files);
+    try generateCode(io, allocator, &files);
 }
 
 /// Resolves cross-file references between all generated files.
@@ -158,10 +160,10 @@ fn resolveReferences(files: *std.ArrayList(ZigFile)) !void {
 /// Parameters:
 ///   - allocator: Memory allocator for file operations
 ///   - files: List of ZigFile instances to generate code for
-fn generateCode(allocator: std.mem.Allocator, files: *std.ArrayList(ZigFile)) !void {
+fn generateCode(io: std.Io, allocator: std.mem.Allocator, files: *std.ArrayList(ZigFile)) !void {
     for (files.items) |*file| {
         var out_file = try FileOutput.init(allocator, file.out_path);
         try file.write(&out_file);
-        try out_file.close();
+        try out_file.close(io);
     }
 }
