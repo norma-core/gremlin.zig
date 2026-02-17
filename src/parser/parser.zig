@@ -97,8 +97,8 @@ fn printError(allocator: std.mem.Allocator, path: []const u8, err: Error, buf: *
 /// Parse protocol buffer files starting from the given base path
 /// Returns a ParseResult containing all parsed files and their buffers
 /// Caller owns the returned ParseResult and must call deinit() on it
-pub fn parse(allocator: std.mem.Allocator, base_path: []const u8, ignore_masks: ?[]const []const u8) !ParseResult {
-    var proto_files = try paths.findProtoFiles(allocator, base_path, ignore_masks);
+pub fn parse(io: std.Io, allocator: std.mem.Allocator, base_path: []const u8, ignore_masks: ?[]const []const u8) !ParseResult {
+    var proto_files = try paths.findProtoFiles(io, allocator, base_path, ignore_masks);
     defer {
         for (proto_files.items) |file| {
             allocator.free(file);
@@ -107,7 +107,7 @@ pub fn parse(allocator: std.mem.Allocator, base_path: []const u8, ignore_masks: 
     }
 
     const root = if (!std.fs.path.isAbsolute(base_path))
-        try std.fs.cwd().realpathAlloc(allocator, base_path)
+        try std.Io.Dir.cwd().realPathFileAlloc(io, base_path, allocator)
     else
         try allocator.dupe(u8, base_path);
     defer allocator.free(root);
@@ -131,7 +131,7 @@ pub fn parse(allocator: std.mem.Allocator, base_path: []const u8, ignore_masks: 
 
     // Process each proto file
     for (proto_files.items) |file_path| {
-        var buffer = try ParserBuffer.initFile(allocator, file_path);
+        var buffer = try ParserBuffer.initFile(io, allocator, file_path);
         errdefer buffer.deinit();
 
         var result = ProtoFile.parse(allocator, &buffer);

@@ -91,17 +91,17 @@ pub const FileOutput = struct {
     /// Collapses consecutive newlines into single newlines.
     ///
     /// Returns: Error if file operations fail
-    pub fn close(self: *FileOutput) !void {
+    pub fn close(self: *FileOutput, io: std.Io) !void {
         // Ensure directory exists
         const dir_path = std.fs.path.dirname(self.path) orelse return error.InvalidPath;
-        try std.fs.cwd().makePath(dir_path);
+        try std.Io.Dir.cwd().createDirPath(io, dir_path);
 
         // Create or truncate output file
-        const file = try std.fs.cwd().createFile(self.path, .{
+        const file = try std.Io.Dir.cwd().createFile(io, self.path, .{
             .truncate = true,
             .read = false,
         });
-        defer file.close();
+        defer file.close(io);
 
         // Collapse consecutive newlines into single newlines
         var processed = try std.ArrayList(u8).initCapacity(self.allocator, self.content.items.len);
@@ -128,13 +128,20 @@ pub const FileOutput = struct {
             trimmed_len -= 1;
         }
 
+        var file_buf: [4096]u8 = undefined;
+        var file_out = file.writer(io, &file_buf);
+        var file_writer = &file_out.interface;
+
         // Write content up to the last non-newline character
         if (trimmed_len > 0) {
-            try file.writeAll(processed.items[0..trimmed_len]);
+            try file_writer.writeAll(processed.items[0..trimmed_len]);
         }
 
         // Always add exactly one newline at the end
-        try file.writeAll("\n");
+        try file_writer.writeAll("\n");
+
+        // Flush the writer
+        try file_writer.flush();
 
         // Free the content buffer
         self.content.deinit(self.allocator);

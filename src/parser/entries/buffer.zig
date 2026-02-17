@@ -36,11 +36,11 @@ pub const ParserBuffer = struct {
 
     /// Initialize a ParserBuffer by reading the entire contents of a file
     /// Caller owns the memory and must call deinit()
-    pub fn initFile(allocator: std.mem.Allocator, path: []const u8) !ParserBuffer {
-        var file = try std.fs.openFileAbsolute(path, .{ .mode = .read_only });
-        defer file.close();
-
-        const buf = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    pub fn initFile(io: std.Io, allocator: std.mem.Allocator, path: []const u8) !ParserBuffer {
+        var file = try std.Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
+        defer file.close(io);
+        var file_reader = file.reader(io, &.{});
+        const buf = try file_reader.interface.allocRemaining(allocator, .unlimited);
         return ParserBuffer{ .buf = buf, .allocator = allocator };
     }
 
@@ -254,9 +254,10 @@ test "large comment" {
 
 test "file read" {
     var path_buffer: [std.fs.max_path_bytes]u8 = undefined;
-    const path = try std.fs.realpath("test_data/google/proto3.proto", &path_buffer);
+    const path_len = try std.Io.Dir.cwd().realPathFile(std.testing.io, "test_data/google/proto3.proto", &path_buffer);
+    const path = path_buffer[0..path_len];
 
-    var buf = try ParserBuffer.initFile(std.testing.allocator, path);
+    var buf = try ParserBuffer.initFile(std.testing.io, std.testing.allocator, path);
     try std.testing.expect(buf.buf.len > 0);
     buf.deinit();
 }

@@ -132,7 +132,8 @@ pub fn importResolve(
     const rel_to_proto = if (well_known_types.isWellKnownImport(import_path))
         try allocator.dupe(u8, import_path)
     else
-        try std.fs.path.relativePosix(allocator, proto_root, import_path);
+        // TODO(jae): Test this change of having to add "cwd"
+        try std.fs.path.relativePosix(allocator, ".", proto_root, import_path);
     defer allocator.free(rel_to_proto);
 
     // Generate output path in target directory
@@ -140,7 +141,8 @@ pub fn importResolve(
     defer allocator.free(out_path);
 
     // Get path relative to project root
-    const rel_to_project = try std.fs.path.relativePosix(allocator, project_root, out_path);
+    // TODO(jae): Test this change of having to add "cwd"
+    const rel_to_project = try std.fs.path.relativePosix(allocator, ".", project_root, out_path);
     defer allocator.free(rel_to_project);
 
     // Generate import alias from filename
