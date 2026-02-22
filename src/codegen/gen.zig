@@ -46,7 +46,6 @@ pub const GeneratorError = error{
 ///   - file: Source Protocol Buffer file
 ///   - proto_root: Root directory of proto files
 ///   - target_root: Root directory for generated Zig files
-///   - project_root: Root directory of the project
 ///
 /// Returns: Initialized ZigFile instance
 /// Error: PathResolutionError if paths cannot be resolved
@@ -56,7 +55,6 @@ fn createFile(
     file: *const ProtoFile,
     proto_root: []const u8,
     target_root: []const u8,
-    project_root: []const u8,
 ) !ZigFile {
     const file_path = file.path.?;
 
@@ -79,7 +77,6 @@ fn createFile(
         file,
         proto_root,
         target_root,
-        project_root,
     ) catch |err| {
         return switch (err) {
             error.OutOfMemory => err,
@@ -96,7 +93,7 @@ fn createFile(
 ///   - allocator: Memory allocator for all operations
 ///   - proto_root: Root directory containing proto files
 ///   - target_root: Root directory for generated Zig files
-///   - project_root: Root directory of the project
+///   - ignore_masks: Optional list of glob patterns to ignore
 ///
 /// Error: GeneratorError variants for different failure modes
 ///        OutOfMemory if allocation fails
@@ -104,7 +101,6 @@ pub fn generateProtobuf(
     allocator: std.mem.Allocator,
     proto_root: []const u8,
     target_root: []const u8,
-    project_root: []const u8,
     ignore_masks: ?[]const []const u8,
 ) !void {
     var parsed = try gremlin_parser.parse(allocator, proto_root, ignore_masks);
@@ -126,7 +122,6 @@ pub fn generateProtobuf(
             file,
             proto_root,
             target_root,
-            project_root,
         ));
     }
 
