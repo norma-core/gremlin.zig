@@ -109,9 +109,8 @@ pub const ZigImport = struct {
 ///   - src: Source Protocol Buffer file containing the import
 ///   - proto_root: Root directory of proto files
 ///   - target_root: Root directory for generated Zig files
-///   - project_root: Root directory of the project
-///   - import_path: Path to the imported proto file
-///   - file_path: Path of the current proto file
+///   - import_path_in_proto_file: Path to the imported proto file
+///   - proto_file_path: Path of the current proto file (the one doing the importing)
 ///   - names: List of existing names to avoid conflicts
 ///
 /// Returns: A new ZigImport instance with resolved paths
@@ -123,40 +122,40 @@ pub fn importResolve(
     proto_root: []const u8,
     target_root: []const u8,
     project_root: []const u8,
-    import_path: []const u8,
-    file_path: []const u8,
+    import_path_in_proto_file: []const u8,
+    proto_file_path: []const u8,
     names: *std.ArrayList([]const u8),
 ) !ZigImport {
     // For well-known types, the import_path is already relative (e.g., "google/protobuf/any.proto")
     // For regular files, compute relative path from proto_root
-    const rel_to_proto = if (well_known_types.isWellKnownImport(import_path))
-        try allocator.dupe(u8, import_path)
+    const imported_file_rel_path_from_proto_root = if (well_known_types.isWellKnownImport(import_path_in_proto_file))
+        try allocator.dupe(u8, import_path_in_proto_file)
     else
-        try std.fs.path.relativePosix(allocator, proto_root, import_path);
-    defer allocator.free(rel_to_proto);
+        try std.fs.path.relativePosix(allocator, proto_root, import_path_in_proto_file);
+    defer allocator.free(imported_file_rel_path_from_proto_root);
 
     // Generate output path in target directory
-    const out_path = try paths.outputPath(allocator, rel_to_proto, target_root);
+    const out_path = try paths.outputPath(allocator, imported_file_rel_path_from_proto_root, target_root);
     defer allocator.free(out_path);
 
     // Get path relative to project root
-    const rel_to_project = try std.fs.path.relativePosix(allocator, project_root, out_path);
-    defer allocator.free(rel_to_project);
+    const rel_to_project_root = try std.fs.path.relativePosix(allocator, project_root, out_path);
+    defer allocator.free(rel_to_project_root);
 
     // Generate import alias from filename
-    const file_name = std.fs.path.stem(import_path);
+    const file_name = std.fs.path.stem(import_path_in_proto_file);
     const name = try naming.importAlias(allocator, file_name, names);
     defer allocator.free(name);
 
     // Determine if import is from same directory
-    const file_dir = std.fs.path.dirname(file_path) orelse ".";
-    const import_dir = std.fs.path.dirname(import_path) orelse ".";
+    const file_dir = std.fs.path.dirname(proto_file_path) orelse ".";
+    const import_dir = std.fs.path.dirname(import_path_in_proto_file) orelse ".";
 
     if (std.mem.eql(u8, file_dir, import_dir)) {
         // Same directory - use just the filename
         return try ZigImport.init(allocator, src, name, std.fs.path.basename(out_path));
     } else {
         // Different directory - use relative path
-        return try ZigImport.init(allocator, src, name, rel_to_project);
+        return try ZigImport.init(allocator, src, name, rel_to_project_root);
     }
 }
