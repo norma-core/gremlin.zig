@@ -56,7 +56,6 @@ fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
 
     const proto_path = try ps.proto_sources.getPath3(b, step).toString(b.allocator);
     const target_path = try ps.gen_output.getPath3(b, step).toString(b.allocator);
-    const build_path = b.build_root.path orelse @panic("build path unknown");
 
     const proto_path_resolved = try std.Build.Cache.Directory.cwd().handle.realpathAlloc(b.allocator, proto_path);
     defer b.allocator.free(proto_path_resolved);
@@ -65,7 +64,6 @@ fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         b.allocator,
         proto_path_resolved,
         target_path,
-        build_path,
         ps.ignore_masks,
     ) catch |err| {
         std.log.err("failed to generate protobuf code: {s}", .{@errorName(err)});

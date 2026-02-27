@@ -60,7 +60,6 @@ pub const ZigFile = struct {
     ///   - file: Source Protocol Buffer file definition
     ///   - proto_root: Root directory of proto files
     ///   - target_root: Root directory for generated Zig files
-    ///   - project_root: Root directory of the project
     ///
     /// Returns: A new ZigFile instance or an error if initialization fails
     pub fn init(
@@ -69,14 +68,13 @@ pub const ZigFile = struct {
         file: *const ProtoFile,
         proto_root: []const u8,
         target_root: []const u8,
-        project_root: []const u8,
     ) !ZigFile {
         // Track names to avoid conflicts
         var names = try std.ArrayList([]const u8).initCapacity(allocator, 128);
         defer names.deinit(allocator);
 
         // Initialize components with proper cleanup on error
-        var imports = try initImports(allocator, file, proto_root, target_root, project_root, &names);
+        var imports = try initImports(allocator, file, proto_root, target_root, &names);
         errdefer {
             for (imports.items) |*import_ref| import_ref.deinit();
             imports.deinit(allocator);
@@ -275,7 +273,6 @@ pub const ZigFile = struct {
         file: *const ProtoFile,
         proto_root: []const u8,
         target_root: []const u8,
-        project_root: []const u8,
         names: *std.ArrayList([]const u8),
     ) !std.ArrayList(import.ZigImport) {
         var imports = try std.ArrayList(import.ZigImport).initCapacity(allocator, 16);
@@ -294,7 +291,6 @@ pub const ZigFile = struct {
                 import_file,
                 proto_root,
                 target_root,
-                project_root,
                 import_file.path.?,
                 file.path.?,
                 names,
